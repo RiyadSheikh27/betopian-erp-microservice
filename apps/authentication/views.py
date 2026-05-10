@@ -23,6 +23,7 @@ def _get_tokens(user):
 
 
 class RegisterView(APIView):
+    permission_classes = []
     parser_classes = [MultiPartParser, FormParser]
 
     @extend_schema(
@@ -52,6 +53,7 @@ class RegisterView(APIView):
 
 
 class LoginView(APIView):
+    permission_classes = []
 
     @extend_schema(
         request=LoginSerializer,

@@ -1,0 +1,1 @@
+""" lcs == Like, Comment & Share"""
