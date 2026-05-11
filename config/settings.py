@@ -17,6 +17,7 @@ ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="*").split(",")
 """ Application definition """
 
 INSTALLED_APPS = [
+    "jazzmin",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -214,4 +215,74 @@ SPECTACULAR_SETTINGS = {
             }
         }
     },
+}
+
+"""Simple and classic Jazzmin admin interface settings"""
+JAZZMIN_SETTINGS = {
+    # Basic branding
+    "site_title": "Admin Panel",
+    "site_header": "Administration",
+    "site_brand": "Admin",
+    "welcome_sign": "Welcome to Admin Panel",
+    "copyright": "Your Company",
+    
+    # Simple search options
+    "search_model": ["auth.User", "auth.Group"],
+    
+    # Clean top menu links
+    "topmenu_links": [
+        {"name": "Dashboard", "url": "admin:index", "permissions": ["auth.view_user"]},
+        {"model": "auth.User"},
+        {"model": "auth.Group"},
+    ],
+    
+    # Basic icons
+    "icons": {
+        "auth": "fas fa-users",
+        "auth.user": "fas fa-user",
+        "auth.group": "fas fa-users",
+    },
+    
+    # Keep it simple
+    "default_icon_parents": "fas fa-chevron-circle-right",
+    "default_icon_children": "fas fa-circle",
+    
+    # Modal for related fields
+    "related_modal_active": True,
+    
+    # Simple form layout
+    "changeform_format": "single",
+    
+    # Don't show UI builder
+    "show_ui_builder": False,
+    
+    # Show sidebar
+    "show_sidebar": True,
+    
+    # Classic light theme
+    "theme": "flatly",
+}
+
+JAZZMIN_UI_TWEAKS = {
+    # Clean, simple theme
+    "theme": "flatly",
+    
+    # Light navbar
+    "navbar": "navbar-light bg-light",
+    
+    # Simple accent
+    "accent": "accent-primary",
+    
+    # Light sidebar
+    "sidebar": "sidebar-light-primary",
+    
+    # Brand color
+    "brand_colour": "navbar-light",
+    
+    # Disable dark mode toggle
+    "theme_switcher": False,
+    
+    # Keep navigation simple
+    "sidebar_nav_small_text": False,
+    "sidebar_disable_expand": False,
 }
