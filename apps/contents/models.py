@@ -49,6 +49,7 @@ class PostMedia(TimeStampedModel):
     file = models.FileField(upload_to="posts/%Y/%m/%d/")
     media_type = models.CharField(max_length=10, choices=MediaType.choices)
     caption = models.TextField(blank=True)
+    view_count = models.PositiveBigIntegerField(default=0)
     order = models.PositiveSmallIntegerField(default=0)
 
     class Meta(TimeStampedModel.Meta):

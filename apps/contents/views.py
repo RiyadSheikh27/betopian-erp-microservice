@@ -346,17 +346,35 @@ class ReelDetailView(APIView):
 
 
 class ReelViewCountView(APIView):
-    """Called by the client when a reel is watched."""
-
+    """Single endpoint for recording reel views from both sources."""
+    
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
-        """Increment reel view count."""
-        try:
-            Reel.objects.only("id").get(pk=pk, privacy=Reel.Privacy.PUBLIC)
-        except Reel.DoesNotExist:
-            return APIResponse.error(message="Reel not found.", status_code=404)
+        source = request.query_params.get("source", "direct")
 
-        Reel.objects.filter(pk=pk).update(view_count=F("view_count") + 1)
-        logger.debug("Reel view counted | reel_id=%s user_id=%s", pk, request.user.pk)
+        if source == "post":
+            from .models import PostMedia
+            updated = PostMedia.objects.filter(
+                pk=pk,
+                post__privacy=Post.Privacy.PUBLIC,
+                media_type=PostMedia.MediaType.VIDEO,
+            ).update(view_count=F("view_count") + 1)
+
+            if not updated:
+                return APIResponse.error(message="Media not found.", status_code=404)
+
+        else: 
+            updated = Reel.objects.filter(
+                pk=pk,
+                privacy=Reel.Privacy.PUBLIC,
+            ).update(view_count=F("view_count") + 1)
+
+            if not updated:
+                return APIResponse.error(message="Reel not found.", status_code=404)
+
+        logger.debug(
+            "Reel view counted | source=%s id=%s user_id=%s",
+            source, pk, request.user.pk,
+        )
         return APIResponse.success(message="View recorded.")

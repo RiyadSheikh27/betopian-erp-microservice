@@ -7,8 +7,10 @@ from apps.contents.views import (
     ReelDetailView,
     ReelViewCountView,
 )
+from apps.feed.views import PostNewsFeedView, ReelNewsFeedView
 
 auth_urlpatterns = [
+    # Authentication
     path("logout/", LogoutView.as_view(), name="auth-logout"),
     path("profile/", ProfileView.as_view(), name="auth-profile"),
 ]
@@ -23,8 +25,15 @@ contents_urlpatterns = [
     path("reels/<uuid:pk>/view/", ReelViewCountView.as_view(), name="reel-view-count"),
 ]
 
+feed_urlpatterns = [
+    # News feed
+    path("feed/posts/", PostNewsFeedView.as_view(), name="feed-posts"),
+    path("feed/reels/", ReelNewsFeedView.as_view(), name="feed-reels"),
+]
+
 
 urlpatterns = [
     *auth_urlpatterns,
     *contents_urlpatterns,
+    *feed_urlpatterns,
 ]
