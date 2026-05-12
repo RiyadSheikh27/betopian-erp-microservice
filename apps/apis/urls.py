@@ -1,6 +1,5 @@
 from django.urls import path
-from rest_framework_simplejwt.views import TokenRefreshView
-from apps.authentication.views import RegisterView, LoginView, LogoutView, ProfileView
+from apps.authentication.views import ProfileView, LogoutView
 from apps.contents.views import (
     PostListCreateView,
     PostDetailView,
@@ -10,12 +9,10 @@ from apps.contents.views import (
 )
 
 auth_urlpatterns = [
-    path("register/", RegisterView.as_view(), name="auth-register"),
-    path("login/", LoginView.as_view(), name="auth-login"),
     path("logout/", LogoutView.as_view(), name="auth-logout"),
-    path("token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
     path("profile/", ProfileView.as_view(), name="auth-profile"),
 ]
+
 
 contents_urlpatterns = [
     # Posts

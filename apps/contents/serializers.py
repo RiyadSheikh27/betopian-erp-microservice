@@ -22,20 +22,14 @@ def _resolve_media_type(file):
 
 
 class PostAuthorSerializer(serializers.Serializer):
-    """Author's basic information."""
+    """Author's basic information — mirrors central ERP user fields."""
 
     id = serializers.UUIDField()
     username = serializers.CharField()
-    full_name = serializers.CharField()
-    designation = serializers.CharField()
-    branch = serializers.CharField()
-    avatar = serializers.SerializerMethodField()
-
-    def get_avatar(self, obj):
-        if not obj.avatar:
-            return None
-        request = self.context.get("request")
-        return request.build_absolute_uri(obj.avatar.url) if request else obj.avatar.url
+    name = serializers.CharField()
+    department = serializers.CharField()
+    position = serializers.CharField()
+    avatar_url = serializers.URLField()
 
 
 class PostMediaSerializer(serializers.ModelSerializer):
