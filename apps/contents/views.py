@@ -347,7 +347,7 @@ class ReelDetailView(APIView):
 
 class ReelViewCountView(APIView):
     """Single endpoint for recording reel views from both sources."""
-    
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
@@ -355,6 +355,7 @@ class ReelViewCountView(APIView):
 
         if source == "post":
             from .models import PostMedia
+
             updated = PostMedia.objects.filter(
                 pk=pk,
                 post__privacy=Post.Privacy.PUBLIC,
@@ -364,7 +365,7 @@ class ReelViewCountView(APIView):
             if not updated:
                 return APIResponse.error(message="Media not found.", status_code=404)
 
-        else: 
+        else:
             updated = Reel.objects.filter(
                 pk=pk,
                 privacy=Reel.Privacy.PUBLIC,
@@ -375,6 +376,8 @@ class ReelViewCountView(APIView):
 
         logger.debug(
             "Reel view counted | source=%s id=%s user_id=%s",
-            source, pk, request.user.pk,
+            source,
+            pk,
+            request.user.pk,
         )
         return APIResponse.success(message="View recorded.")
