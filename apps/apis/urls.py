@@ -13,7 +13,6 @@ auth_urlpatterns = [
     path("profile/", ProfileView.as_view(), name="auth-profile"),
 ]
 
-
 contents_urlpatterns = [
     # Posts
     path("posts/", PostListCreateView.as_view(), name="post-list-create"),

@@ -346,10 +346,7 @@ class ReelDetailView(APIView):
 
 
 class ReelViewCountView(APIView):
-    """
-    Called by the client when a reel is watched.
-    F() expression → atomic SQL UPDATE, no race condition under high concurrency.
-    """
+    """Called by the client when a reel is watched."""
 
     permission_classes = [IsAuthenticated]
 

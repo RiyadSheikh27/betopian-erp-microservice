@@ -10,31 +10,12 @@ logger = logging.getLogger("apps.authentication")
 
 CENTRAL_LOGIN_URL = "https://erp.betopiagroup.com/login/"
 CENTRAL_PROFILE_URL = "https://erp.betopiagroup.com/profiles/"
-CENTRAL_TIMEOUT = 10
+CENTRAL_TIMEOUT = 20
 
+"""Custom authentication backend that validates tokens against the central ERP and mirrors user profiles locally."""
 
 class CentralTokenAuthentication(BaseAuthentication):
-    """
-    Authenticates every request against the central ERP.
-
-    Flow:
-      1. Extract Bearer token from Authorization header
-      2. Extract session_id from request cookies (set by central ERP on login)
-      3. Forward both to central ERP /profiles/
-      4. On success  → upsert local user, return (user, token)
-      5. On 401/403  → raise AuthenticationFailed
-      6. No token    → return None (DRF permission class handles it)
-
-    Why session_id is needed:
-      Central ERP is Odoo-based and uses cookie session for company/tenant
-      resolution alongside the JWT for user identity. Both are required.
-      Flutter must store and forward the session_id cookie received
-      from the central login response on every request to this service.
-
-    Performance note:
-      Every request makes one external HTTP call to central ERP.
-      Introduce Redis cache with short TTL (5 min) when traffic grows.
-    """
+    """Authenticates every request against the central ERP."""
 
     def authenticate(self, request):
         auth_header = request.headers.get("Authorization", "")
@@ -97,7 +78,6 @@ class CentralTokenAuthentication(BaseAuthentication):
     def _upsert_user(self, profile, token):
         """
         Create or update local user mirror from central profile.
-        Keyed on employee_id — the most stable central identifier.
         Called on every request so profile is always fresh.
         """
         username = profile["email"].split("@")[0]

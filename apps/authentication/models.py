@@ -6,12 +6,13 @@ from django.contrib.auth.models import (
 )
 from django.db import models
 
+""" Custom user model for central ERP users. Read-only mirror of central auth data. """
 
 class UserManager(BaseUserManager):
     def create_superuser(self, email, password=None, **extra_fields):
         """
         Creates a local admin user for Django admin panel access only.
-        Not related to central auth — admin panel use only.
+        Not related to central auth - admin panel use only.
         """
         username = email.split("@")[0]
         user = self.model(
@@ -32,17 +33,11 @@ class UserManager(BaseUserManager):
 class User(AbstractBaseUser, PermissionsMixin):
     """
     Read-only mirror of the central ERP user.
-    Created and updated on every authenticated request via CentralTokenAuthentication.
-    Central ERP owns all user data — no registration or profile editing from this service.
-
-    password field is nullable — only populated for Django admin superusers.
     Central auth users always have password=None.
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    employee_id = models.CharField(
-        max_length=100, unique=True, db_index=True
-    )  # stable central key
+    employee_id = models.CharField(max_length=100, unique=True, db_index=True)
     email = models.EmailField(unique=True)
     username = models.CharField(
         max_length=100, unique=True
@@ -55,7 +50,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         max_length=500, blank=True
     )  # external URL, no local file
 
-    # Nullable — only set for Django admin superusers, never for central auth users
+    # Only set for Django admin superusers, never for central auth users
     password = models.CharField(max_length=128, blank=True, null=True)
 
     # Stored for use by other ERP services within the same app
