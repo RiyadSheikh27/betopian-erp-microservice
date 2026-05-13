@@ -52,14 +52,17 @@ ROOT_URLCONF = "config.urls"
 
 TEMPLATES = [
     {
-        "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
-        "APP_DIRS": True,
-        "OPTIONS": {
-            "context_processors": [
-                "django.template.context_processors.request",
-                "django.contrib.auth.context_processors.auth",
-                "django.contrib.messages.context_processors.messages",
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [
+            BASE_DIR / 'templates',
+        ],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
             ],
         },
     },
@@ -137,12 +140,8 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "apps.authentication.backends.CentralTokenAuthentication",
     ),
-    "DEFAULT_PERMISSION_CLASSES": (
-        "rest_framework.permissions.IsAuthenticated",
-    ),
-    "DEFAULT_RENDERER_CLASSES": (
-        "rest_framework.renderers.JSONRenderer",
-    ),
+    "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
+    "DEFAULT_RENDERER_CLASSES": ("rest_framework.renderers.JSONRenderer",),
     "DEFAULT_PARSER_CLASSES": (
         "rest_framework.parsers.JSONParser",
         "rest_framework.parsers.MultiPartParser",
@@ -199,7 +198,7 @@ LOGGING = {
             "level": "DEBUG",
             "propagate": False,
         },
-        # Django internals — only warnings and above to keep terminal clean
+        # Django internals - only warnings and above to keep terminal clean
         "django": {
             "handlers": ["console"],
             "level": "WARNING",
@@ -237,70 +236,52 @@ SPECTACULAR_SETTINGS = {
 
 """Simple and classic Jazzmin admin interface settings"""
 JAZZMIN_SETTINGS = {
-    # Basic branding
-    "site_title": "Admin Panel",
-    "site_header": "Administration",
-    "site_brand": "Admin",
-    "welcome_sign": "Welcome to Admin Panel",
-    "copyright": "Your Company",
-    
-    # Simple search options
-    "search_model": ["auth.User", "auth.Group"],
-    
-    # Clean top menu links
-    "topmenu_links": [
-        {"name": "Dashboard", "url": "admin:index", "permissions": ["auth.view_user"]},
-        {"model": "auth.User"},
-        {"model": "auth.Group"},
+    "site_title": "Betopian Admin",
+    "site_header": "Betopian Administration",
+    "site_brand": "Betopian",
+    "show_sidebar": True,
+    "navigation_expanded": False,
+    "order_with_respect_to": [
+        "auth",
+        "auth.user",
+        "auth.group",
     ],
-    
-    # Basic icons
     "icons": {
-        "auth": "fas fa-users",
+        "auth": "fas fa-users-cog",
         "auth.user": "fas fa-user",
         "auth.group": "fas fa-users",
     },
-    
-    # Keep it simple
-    "default_icon_parents": "fas fa-chevron-circle-right",
-    "default_icon_children": "fas fa-circle",
-    
-    # Modal for related fields
+    "custom_links": {
+        "auth": [
+            {
+                "name": "Main Website",
+                "url": "/",
+                "icon": "fas fa-home",
+            }
+        ]
+    },
     "related_modal_active": True,
-    
-    # Simple form layout
-    "changeform_format": "single",
-    
-    # Don't show UI builder
     "show_ui_builder": False,
-    
-    # Show sidebar
-    "show_sidebar": True,
-    
-    # Classic light theme
-    "theme": "flatly",
 }
-
 JAZZMIN_UI_TWEAKS = {
-    # Clean, simple theme
     "theme": "flatly",
-    
-    # Light navbar
-    "navbar": "navbar-light bg-light",
-    
-    # Simple accent
+    "navbar": "navbar-dark navbar-primary",
+    "sidebar": "sidebar-dark-primary",
     "accent": "accent-primary",
-    
-    # Light sidebar
-    "sidebar": "sidebar-light-primary",
-    
-    # Brand color
-    "brand_colour": "navbar-light",
-    
-    # Disable dark mode toggle
-    "theme_switcher": False,
-    
-    # Keep navigation simple
+    "brand_colour": "navbar-primary",
     "sidebar_nav_small_text": False,
     "sidebar_disable_expand": False,
+    "sidebar_nav_child_indent": True,
+    "sidebar_nav_compact_style": False,
+    "theme_switcher": False,
+    "actions_sticky_top": True,
 }
+
+import sentry_sdk
+
+sentry_sdk.init(
+    dsn="https://73fd8f8695bcbc9e7ea3441bb120546c@o4511380585250816.ingest.us.sentry.io/4511380587216896",
+    # Add data like request headers and IP for users,
+    # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
+    send_default_pii=True,
+)

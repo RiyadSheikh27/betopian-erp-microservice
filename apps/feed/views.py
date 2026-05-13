@@ -101,14 +101,7 @@ class PostNewsFeedView(APIView):
 
 
 class ReelNewsFeedView(APIView):
-    """
-    Unified reel feed from two sources:
-      1. Direct reels  (Reel model, privacy=public)
-      2. Post videos   (PostMedia, media_type=video, post privacy=public)
-
-    Both are normalised into one dict shape, merged in Python,
-    then cursor-sorted so the feed is seamless.
-    """
+    """Unified reel feed"""
 
     permission_classes = [IsAuthenticated]
 
