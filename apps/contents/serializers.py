@@ -36,10 +36,12 @@ class PostMediaSerializer(serializers.ModelSerializer):
     """Media item representation."""
 
     url = serializers.SerializerMethodField()
+    likes_count = serializers.IntegerField(read_only=True, default=0)
+    comment_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = PostMedia
-        fields = ("id", "url", "media_type", "caption", "order")
+        fields = ("id", "url", "media_type", "caption", "order", "likes_count", "comment_count")
 
     def get_url(self, obj):
         request = self.context.get("request")
@@ -52,6 +54,8 @@ class PostSerializer(serializers.ModelSerializer):
     author = PostAuthorSerializer(read_only=True)
     media = PostMediaSerializer(many=True, read_only=True)
     media_count = serializers.IntegerField(read_only=True)
+    likes_count = serializers.IntegerField(read_only=True, default=0)
+    comment_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = Post
@@ -63,6 +67,8 @@ class PostSerializer(serializers.ModelSerializer):
             "is_edited",
             "media",
             "media_count",
+            "likes_count",
+            "comment_count",
             "created_at",
             "updated_at",
         )
@@ -220,6 +226,8 @@ class ReelSerializer(serializers.ModelSerializer):
 
     author = PostAuthorSerializer(read_only=True)
     video_url = serializers.SerializerMethodField()
+    likes_count = serializers.IntegerField(read_only=True, default=0)
+    comment_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = Reel
@@ -230,6 +238,8 @@ class ReelSerializer(serializers.ModelSerializer):
             "video_url",
             "privacy",
             "view_count",
+            "likes_count",
+            "comment_count",
             "is_edited",
             "created_at",
             "updated_at",

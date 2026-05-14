@@ -1,13 +1,13 @@
 import base64
 import logging
 
-from django.db.models import Count, F
+from django.db.models import Count, F, Prefetch
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 
 from apps.utils.response import APIResponse
-from .models import Post, Reel
+from .models import Post, PostMedia, Reel
 from .serializers import (
     PostSerializer,
     PostCreateSerializer,
@@ -66,24 +66,39 @@ def _paginate_cursor(queryset, page_size):
 
 
 def _post_queryset():
-    """Base post queryset - eliminates all N+1 issues."""
     return (
         Post.objects.select_related("author")
-        .prefetch_related("media")
-        .annotate(media_count=Count("media"))
+        .prefetch_related(Prefetch("media", queryset=_annotated_media_qs()))
+        .annotate(
+            media_count=Count("media", distinct=True),
+            like_count=Count("likes", distinct=True),
+            comment_count=Count("comments", distinct=True),
+        )
         .order_by("-created_at", "-id")
     )
 
 
 def _reel_queryset():
-    return Reel.objects.select_related("author").order_by("-created_at", "-id")
-
+    return (
+        Reel.objects.select_related("author")
+        .annotate(
+            like_count=Count("likes", distinct=True),
+            comment_count=Count("comments", distinct=True),
+        )
+        .order_by("-created_at", "-id")
+    )
 
 def _parse_page_size(request, default=10):
     try:
         return min(int(request.query_params.get("page_size", default)), 50)
     except (TypeError, ValueError):
         return default
+    
+def _annotated_media_qs():
+    return PostMedia.objects.annotate(
+        like_count=Count("likes", distinct=True),
+        comment_count=Count("comments", distinct=True),
+    ).order_by("order")
 
 
 """ POST SECTION VIEWS"""

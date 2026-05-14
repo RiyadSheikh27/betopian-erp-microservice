@@ -1,26 +1,35 @@
 from django.contrib import admin
-from django.contrib.contenttypes.admin import GenericTabularInline
-
-from .models import Like
+from .models import Like, Comment
 
 
 @admin.register(Like)
 class LikeAdmin(admin.ModelAdmin):
+    list_display = ("user", "content_type", "object_id", "created_at")
+    list_filter = ("content_type",)
+    search_fields = ("user__username", "user__name", "object_id")
+    readonly_fields = ("user", "content_type", "object_id", "created_at")
+
+
+@admin.register(Comment)
+class CommentAdmin(admin.ModelAdmin):
     list_display = (
         "id",
         "user",
         "content_type",
         "object_id",
-        "content_object_display",
+        "parent",
+        "is_deleted",
         "created_at",
     )
 
     list_filter = (
+        "is_deleted",
         "content_type",
         "created_at",
     )
 
     search_fields = (
+        "body",
         "user__username",
         "user__email",
         "object_id",
@@ -29,19 +38,27 @@ class LikeAdmin(admin.ModelAdmin):
     readonly_fields = (
         "created_at",
         "updated_at",
-        "content_object",
+        "content_type",
+        "object_id",
+        "parent",
+        "user",
     )
-
-    autocomplete_fields = ("user",)
 
     ordering = ("-created_at",)
 
-    def content_object_display(self, obj):
-        """
-        Show human-readable target info in admin list view
-        """
-        if obj.content_object:
-            return str(obj.content_object)
-        return "Deleted Object"
+    actions = ["soft_delete_comments", "restore_comments"]
 
-    content_object_display.short_description = "Target Object"
+    def soft_delete_comments(self, request, queryset):
+        count = 0
+        for comment in queryset:
+            comment.soft_delete()
+            count += 1
+        self.message_user(request, f"{count} comments soft deleted.")
+
+    soft_delete_comments.short_description = "Soft delete selected comments"
+
+    def restore_comments(self, request, queryset):
+        count = queryset.update(is_deleted=False, body="restored comment")
+        self.message_user(request, f"{count} comments restored.")
+
+    restore_comments.short_description = "Restore selected comments"

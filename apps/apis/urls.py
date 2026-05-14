@@ -8,6 +8,12 @@ from apps.contents.views import (
     ReelViewCountView,
 )
 from apps.feed.views import PostNewsFeedView, ReelNewsFeedView
+from apps.interactions.views import (
+    LikeToggleView, 
+    LikerListView, 
+    CommentListCreateView, 
+    CommentDetailView,
+)
 
 auth_urlpatterns = [
     # Authentication
@@ -31,9 +37,19 @@ feed_urlpatterns = [
     path("feed/reels/", ReelNewsFeedView.as_view(), name="feed-reels"),
 ]
 
+interactions_urlpatterns = [
+    # Likes
+    path("like/<str:target_type>/<uuid:pk>/", LikeToggleView.as_view(), name="like-toggle"),
+    path("likers/<str:target_type>/<uuid:pk>/", LikerListView.as_view(), name="liker-list"),
+    # Comment
+    path("comment/<str:target_type>/<uuid:pk>/", CommentListCreateView.as_view(), name="comment-list-create"),
+    path("comment/<str:target_type>/<uuid:pk>/<uuid:comment_id>/", CommentDetailView.as_view(), name="comment-detail"),
+]
+
 
 urlpatterns = [
     *auth_urlpatterns,
     *contents_urlpatterns,
     *feed_urlpatterns,
+    *interactions_urlpatterns,
 ]

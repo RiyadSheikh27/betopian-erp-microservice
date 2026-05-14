@@ -11,6 +11,8 @@ class NFFeedPostMediaSerializer(serializers.Serializer):
     media_type = serializers.CharField()
     caption = serializers.CharField()
     order = serializers.IntegerField()
+    like_count = serializers.IntegerField(default=0)
+    comment_count = serializers.IntegerField(default=0)
 
     def get_url(self, obj):
         request = self.context.get("request")
@@ -30,6 +32,8 @@ class NFFeedPostSerializer(serializers.Serializer):
     is_edited = serializers.BooleanField()
     media = NFFeedPostMediaSerializer(many=True)
     media_count = serializers.IntegerField()
+    like_count = serializers.IntegerField(default=0)
+    comment_count = serializers.IntegerField(default=0)
     created_at = serializers.DateTimeField()
     updated_at = serializers.DateTimeField()
 
@@ -50,6 +54,8 @@ class NFFeedReelSerializer(serializers.Serializer):
     video_url = serializers.SerializerMethodField()
     privacy = serializers.CharField()
     view_count = serializers.IntegerField()
+    like_count = serializers.IntegerField(default=0)
+    comment_count = serializers.IntegerField(default=0)
     created_at = serializers.DateTimeField()
 
     def get_video_url(self, obj):

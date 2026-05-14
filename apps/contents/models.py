@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import models
 from apps.utils.models import TimeStampedModel
+from django.contrib.contenttypes.fields import GenericRelation
 
 """ Post Manage Section """
 
@@ -23,6 +24,8 @@ class Post(TimeStampedModel):
         choices=Privacy.choices,
         default=Privacy.PUBLIC,
     )
+    likes = GenericRelation("interactions.Like", related_query_name="post")
+    comments = GenericRelation("interactions.Comment", related_query_name="post")
     is_edited = models.BooleanField(default=False)
 
     class Meta(TimeStampedModel.Meta):
@@ -49,6 +52,8 @@ class PostMedia(TimeStampedModel):
     file = models.FileField(upload_to="posts/%Y/%m/%d/")
     media_type = models.CharField(max_length=10, choices=MediaType.choices)
     caption = models.TextField(blank=True)
+    likes = GenericRelation("interactions.Like")
+    comments = GenericRelation("interactions.Comment")
     view_count = models.PositiveBigIntegerField(default=0)
     order = models.PositiveSmallIntegerField(default=0)
 
@@ -77,6 +82,8 @@ class Reel(TimeStampedModel):
     privacy = models.CharField(
         max_length=10, choices=Privacy.choices, default=Privacy.PUBLIC
     )
+    likes = GenericRelation("interactions.Like")
+    comments = GenericRelation("interactions.Comment")
     view_count = models.PositiveBigIntegerField(default=0)
     is_edited = models.BooleanField(default=False)
 

@@ -1,13 +1,14 @@
 import base64
 import logging
 
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Prefetch
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
 from apps.utils.response import APIResponse
 from apps.contents.models import Post, PostMedia, Reel
 from .serializers import NFFeedPostSerializer, NFFeedReelSerializer
+from apps.contents.views import _annotated_media_qs
 
 logger = logging.getLogger("apps.contents")
 
@@ -54,8 +55,12 @@ class PostNewsFeedView(APIView):
         qs = (
             Post.objects.filter(privacy=Post.Privacy.PUBLIC)
             .select_related("author")
-            .prefetch_related("media")
-            .annotate(media_count=Count("media"))
+            .prefetch_related(Prefetch("media", queryset=_annotated_media_qs()))
+            .annotate(
+                media_count=Count("media", distinct=True),
+                like_count=Count("likes", distinct=True),
+                comment_count=Count("comments", distinct=True),
+            )
             .order_by("-created_at", "-id")
         )
 
@@ -127,6 +132,10 @@ class ReelNewsFeedView(APIView):
         direct_qs = (
             Reel.objects.filter(privacy=Reel.Privacy.PUBLIC)
             .select_related("author")
+            .annotate(
+                like_count=Count("likes", distinct=True),
+                comment_count=Count("comments", distinct=True),
+            )
             .order_by("-created_at", "-id")
         )
         if cursor_filter:
@@ -146,6 +155,10 @@ class ReelNewsFeedView(APIView):
                 post__privacy=Post.Privacy.PUBLIC,
             )
             .select_related("post__author")
+            .annotate(
+                like_count=Count("likes", distinct=True),
+                comment_count=Count("comments", distinct=True),
+            )
             .order_by("-created_at", "-id")
         )
         if cursor_filter:
@@ -170,6 +183,8 @@ class ReelNewsFeedView(APIView):
                     "caption": r.caption,
                     "video_url": request.build_absolute_uri(r.video.url),
                     "privacy": r.privacy,
+                    "like_count": r.like_count,
+                    "comment_count": r.comment_count,
                     "view_count": r.view_count,
                     "created_at": r.created_at,
                 }
@@ -184,6 +199,8 @@ class ReelNewsFeedView(APIView):
                     "caption": pm.caption,
                     "video_url": request.build_absolute_uri(pm.file.url),
                     "privacy": pm.post.privacy,
+                    "like_count": pm.like_count,
+                    "comment_count": pm.comment_count,
                     "view_count": pm.view_count,  # CHANGED — was hardcoded 0
                     "created_at": pm.created_at,
                 }

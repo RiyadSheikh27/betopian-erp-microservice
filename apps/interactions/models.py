@@ -5,6 +5,8 @@ from django.db import models
 
 from apps.utils.models import TimeStampedModel
 
+""" LIKE SECTION'S MODELS """
+
 
 class Like(TimeStampedModel):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
@@ -34,3 +36,38 @@ class Like(TimeStampedModel):
 
     def __str__(self):
         return f"{self.user.username} liked {self.content_type} {self.object_id}"
+
+
+""" Comment Section """
+
+
+class Comment(TimeStampedModel):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="comments"
+    )
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.UUIDField()
+    content_object = GenericForeignKey("content_type", "object_id")
+    parent = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.CASCADE, related_name="replies"
+    )
+    body = models.TextField()
+    is_deleted = models.BooleanField(default=False)  # Soft Delete FloatRangeField
+
+    class Meta(TimeStampedModel.Meta):
+        db_table = "comments"
+        indexes = [
+            # Fast comment list per target
+            models.Index(
+                fields=["content_type", "object_id", "created_at"],
+                name="idx_comment_target_created",
+            ),
+            # Fast reply list per parent
+            models.Index(
+                fields=["parent", "created_at"],
+                name="idx_comment_parent_created",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} commented on {self.content_type} {self.object_id}"
