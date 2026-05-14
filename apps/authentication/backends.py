@@ -14,6 +14,7 @@ CENTRAL_TIMEOUT = 20
 
 """Custom authentication backend that validates tokens against the central ERP and mirrors user profiles locally."""
 
+
 class CentralTokenAuthentication(BaseAuthentication):
     """Authenticates every request against the central ERP."""
 
@@ -91,7 +92,7 @@ class CentralTokenAuthentication(BaseAuthentication):
                 "phone": profile.get("phone", ""),
                 "department": profile.get("department", ""),
                 "position": profile.get("position", ""),
-                "avatar_url": profile.get("avatar_url", ""),
+                "avatar_url": profile.get("avatar_base64", ""),
                 "central_access_token": token,
                 "is_active": True,
             },
