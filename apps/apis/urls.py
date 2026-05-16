@@ -14,6 +14,11 @@ from apps.interactions.views import (
     CommentListCreateView, 
     CommentDetailView,
 )
+from apps.utils.views import ProfileImageUploadView
+
+utils_urlpatterns = [
+    path("upload-profile-image/", ProfileImageUploadView.as_view(), name="upload-profile-image"),
+]
 
 auth_urlpatterns = [
     # Authentication
@@ -52,4 +57,5 @@ urlpatterns = [
     *contents_urlpatterns,
     *feed_urlpatterns,
     *interactions_urlpatterns,
+    *utils_urlpatterns
 ]
