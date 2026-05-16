@@ -15,6 +15,7 @@ from apps.interactions.views import (
     CommentDetailView,
 )
 from apps.utils.views import ProfileImageUploadView
+from apps.mom import views
 
 utils_urlpatterns = [
     path("upload-profile-image/", ProfileImageUploadView.as_view(), name="upload-profile-image"),
@@ -51,11 +52,30 @@ interactions_urlpatterns = [
     path("comment/<str:target_type>/<uuid:pk>/<uuid:comment_id>/", CommentDetailView.as_view(), name="comment-detail"),
 ]
 
+from django.urls import path
+import uuid
+
+mom_urlpatterns = [
+    path("notes/", views.GeneralNoteListCreateView.as_view(), name="general-note-list-create"),
+    path("notes/<uuid:note_id>/", views.GeneralNoteDetailView.as_view(), name="general-note-detail"),
+
+    path("meetings/", views.MeetingListCreateView.as_view(), name="meeting-list-create"),
+    path("meetings/<uuid:meeting_id>/",  views.MeetingDetailView.as_view(), name="meeting-detail"),
+
+    path("meetings/<uuid:meeting_id>/agenda/", views.AgendaItemListCreateView.as_view(), name="agenda-create"),
+    path("meetings/<uuid:meeting_id>/agenda/<uuid:item_id>/", views.AgendaItemDetailView.as_view(),     name="agenda-detail"),
+
+    path("meetings/<uuid:meeting_id>/notes/", views.MeetingNoteListCreateView.as_view(), name="meeting-note-create"),
+
+    path("notes-tab/", views.AllNotesListView.as_view(), name="all-notes-tab"),
+]
+ 
 
 urlpatterns = [
     *auth_urlpatterns,
     *contents_urlpatterns,
     *feed_urlpatterns,
     *interactions_urlpatterns,
-    *utils_urlpatterns
+    *utils_urlpatterns,
+    *mom_urlpatterns,
 ]
