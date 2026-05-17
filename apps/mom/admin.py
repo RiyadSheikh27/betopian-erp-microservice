@@ -1,38 +1,34 @@
-# from django.contrib import admin
-# from .models import GeneralNote, Meeting, AgendaItem, MeetingNote
+from django.contrib import admin
+from .models import Meeting, MeetingParticipant, AgendaItem, MeetingNote, GeneralNote
 
 
-# @admin.register(GeneralNote)
-# class GeneralNoteAdmin(admin.ModelAdmin):
-#     list_display = ["id", "title", "user", "created_at"]
-#     search_fields = ["title", "user__username"]
+class MeetingParticipantInline(admin.TabularInline):
+    model  = MeetingParticipant
+    extra  = 0
+    readonly_fields = ("central_id", "is_creator", "created_at")
 
 
-# class AgendaItemInline(admin.TabularInline):
-#     model = AgendaItem
-#     extra = 0
+class AgendaItemInline(admin.TabularInline):
+    model  = AgendaItem
+    extra  = 0
+    readonly_fields = ("created_at",)
 
 
-# class MeetingNoteInline(admin.TabularInline):
-#     model = MeetingNote
-#     extra = 0
-#     readonly_fields = ["created_at"]
+class MeetingNoteInline(admin.TabularInline):
+    model         = MeetingNote
+    extra         = 0
+    readonly_fields = ("description", "created_by_central_id", "created_at")
+
+@admin.register(Meeting)
+class MeetingAdmin(admin.ModelAdmin):
+    list_display    = ("title", "creator_central_id", "scheduled_at", "created_at")
+    search_fields   = ("title", "creator_central_id")
+    readonly_fields = ("id", "created_at", "updated_at")
+    inlines         = [MeetingParticipantInline, AgendaItemInline, MeetingNoteInline]
 
 
-# @admin.register(Meeting)
-# class MeetingAdmin(admin.ModelAdmin):
-#     list_display = ["id", "title", "user", "scheduled_at", "location"]
-#     search_fields = ["title", "user__username"]
-#     inlines = [AgendaItemInline, MeetingNoteInline]
-
-
-# @admin.register(AgendaItem)
-# class AgendaItemAdmin(admin.ModelAdmin):
-#     list_display = ["id", "title", "meeting", "is_done"]
-#     list_filter = ["is_done"]
-
-
-# @admin.register(MeetingNote)
-# class MeetingNoteAdmin(admin.ModelAdmin):
-#     list_display = ["id", "meeting", "created_at"]
-#     readonly_fields = ["created_at"]
+@admin.register(GeneralNote)
+class GeneralNoteAdmin(admin.ModelAdmin):
+    list_display    = ("title", "owner_central_id", "created_at")
+    search_fields   = ("title", "owner_central_id")
+    readonly_fields = ("id", "created_at", "updated_at")

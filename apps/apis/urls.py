@@ -15,7 +15,13 @@ from apps.interactions.views import (
     CommentDetailView,
 )
 from apps.utils.views import ProfileImageUploadView
-from apps.mom import views
+from apps.mom.views import (
+    GeneralNoteListCreateView, GeneralNoteDetailView,
+    MeetingListCreateView, MeetingDetailView,
+    AgendaItemCreateView, AgendaItemDetailView,
+    MeetingNoteCreateView, MeetingNoteDetailView,
+    NotesTabView,
+)
 
 utils_urlpatterns = [
     path("upload-profile-image/", ProfileImageUploadView.as_view(), name="upload-profile-image"),
@@ -56,19 +62,26 @@ from django.urls import path
 import uuid
 
 mom_urlpatterns = [
-    path("notes/", views.GeneralNoteListCreateView.as_view(), name="general-note-list-create"),
-    path("notes/<uuid:note_id>/", views.GeneralNoteDetailView.as_view(), name="general-note-detail"),
+    # General notes
+    path("notes/", GeneralNoteListCreateView.as_view(), name="mom-note-list-create"),
+    path("notes/<uuid:pk>/", GeneralNoteDetailView.as_view(), name="mom-note-detail"),
 
-    path("meetings/", views.MeetingListCreateView.as_view(), name="meeting-list-create"),
-    path("meetings/<uuid:meeting_id>/",  views.MeetingDetailView.as_view(), name="meeting-detail"),
+    # Meetings
+    path("meetings/", MeetingListCreateView.as_view(), name="mom-meeting-list-create"),
+    path("meetings/<uuid:pk>/", MeetingDetailView.as_view(), name="mom-meeting-detail"),
 
-    path("meetings/<uuid:meeting_id>/agenda/", views.AgendaItemListCreateView.as_view(), name="agenda-create"),
-    path("meetings/<uuid:meeting_id>/agenda/<uuid:item_id>/", views.AgendaItemDetailView.as_view(),     name="agenda-detail"),
+    # Agenda items
+    path("meetings/<uuid:pk>/agenda/", AgendaItemCreateView.as_view(), name="mom-agenda-create"),
+    path("meetings/<uuid:pk>/agenda/<uuid:item_id>/", AgendaItemDetailView.as_view(), name="mom-agenda-detail"),
 
-    path("meetings/<uuid:meeting_id>/notes/", views.MeetingNoteListCreateView.as_view(), name="meeting-note-create"),
+    # Meeting notes (write-once)
+    path("meetings/<uuid:pk>/notes/", MeetingNoteCreateView.as_view(), name="mom-meeting-note-create"),
+    path("meetings/<uuid:pk>/notes/<uuid:note_id>/", MeetingNoteDetailView.as_view(), name="mom-meeting-note-detail"),
 
-    path("notes-tab/", views.AllNotesListView.as_view(), name="all-notes-tab"),
+    # Notes tab
+    path("notes-tab/", NotesTabView.as_view(), name="mom-notes-tab"),
 ]
+
  
 
 urlpatterns = [
