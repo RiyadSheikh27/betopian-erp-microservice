@@ -9,6 +9,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         model = User
         fields = (
             "id",
+            "central_id",
             "employee_id",
             "name",
             "email",

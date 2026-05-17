@@ -88,12 +88,14 @@ def _reel_queryset():
         .order_by("-created_at", "-id")
     )
 
+
 def _parse_page_size(request, default=10):
     try:
         return min(int(request.query_params.get("page_size", default)), 50)
     except (TypeError, ValueError):
         return default
-    
+
+
 def _annotated_media_qs():
     return PostMedia.objects.annotate(
         like_count=Count("likes", distinct=True),

@@ -29,7 +29,6 @@ class UserManager(BaseUserManager):
         user.save(using=self._db)
         return user
 
-
 class User(AbstractBaseUser, PermissionsMixin):
     """
     Read-only mirror of the central ERP user.
@@ -37,6 +36,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    central_id = models.BigIntegerField(unique=True, blank=True, null=True)
     employee_id = models.CharField(max_length=100, unique=True, db_index=True)
     email = models.EmailField(unique=True)
     username = models.CharField(
@@ -46,9 +46,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     phone = models.CharField(max_length=20, blank=True)
     department = models.CharField(max_length=150, blank=True)
     position = models.CharField(max_length=150, blank=True)
-    avatar_url = models.URLField(
-        max_length=500, blank=True
-    )  # external URL, no local file
+    avatar_url = models.URLField(max_length=500, blank=True, null=True)
 
     # Only set for Django admin superusers, never for central auth users
     password = models.CharField(max_length=128, blank=True, null=True)

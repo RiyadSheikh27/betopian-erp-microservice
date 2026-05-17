@@ -8,15 +8,11 @@ from rest_framework.exceptions import AuthenticationFailed
 User = get_user_model()
 logger = logging.getLogger("apps.authentication")
 
-CENTRAL_LOGIN_URL = "https://erp.betopiagroup.com/login/"
 CENTRAL_PROFILE_URL = "https://erp.betopiagroup.com/profiles/"
 CENTRAL_TIMEOUT = 20
 
-"""Custom authentication backend that validates tokens against the central ERP and mirrors user profiles locally."""
-
 
 class CentralTokenAuthentication(BaseAuthentication):
-    """Authenticates every request against the central ERP."""
 
     def authenticate(self, request):
         auth_header = request.headers.get("Authorization", "")
@@ -27,11 +23,9 @@ class CentralTokenAuthentication(BaseAuthentication):
         if not token:
             return None
 
-        # session_id cookie must be forwarded from the original central login
         session_id = request.COOKIES.get("session_id", "")
-
         profile = self._fetch_profile(token, session_id)
-        user = self._upsert_user(profile, token)
+        user = self._sync_user(profile, token)
 
         logger.debug(
             "Request authenticated | user_id=%s email=%s",
@@ -41,10 +35,6 @@ class CentralTokenAuthentication(BaseAuthentication):
         return (user, token)
 
     def _fetch_profile(self, token, session_id):
-        """
-        Verify token and fetch user profile from central ERP.
-        Raises AuthenticationFailed on any failure.
-        """
         try:
             resp = requests.get(
                 CENTRAL_PROFILE_URL,
@@ -62,45 +52,80 @@ class CentralTokenAuthentication(BaseAuthentication):
         if resp.status_code == 401:
             raise AuthenticationFailed("Invalid or expired token.")
         if resp.status_code == 403:
-            logger.warning(
-                "Central profile returned 403 — missing or invalid session_id cookie"
-            )
+            logger.warning("Central profile 403 — invalid session_id cookie")
+            raise AuthenticationFailed("Session invalid. Please login again.")
+        if resp.status_code == 500:
+            logger.error("Central profile returned 500 — server error on central ERP")
             raise AuthenticationFailed(
-                "Session invalid. Please login again through the central ERP."
+                "Central auth service is temporarily unavailable. Try again."
             )
+
         if resp.status_code != 200:
             logger.error(
-                "Central profile API returned %s | body=%s", resp.status_code, resp.text
+                "Central profile returned %s | body=%s",
+                resp.status_code,
+                resp.text,
             )
             raise AuthenticationFailed("Central auth service error.")
 
         return resp.json()
 
-    def _upsert_user(self, profile, token):
+    def _sync_user(self, profile, token):
         """
-        Create or update local user mirror from central profile.
-        Called on every request so profile is always fresh.
+        Create user on first hit — no prior login step needed.
+        On subsequent requests, only write to DB if something actually changed.
+        This prevents unnecessary DB writes on every request under high traffic.
         """
-        username = profile["email"].split("@")[0]
+        employee_id = profile["employee_id"]
 
-        user, created = User.objects.update_or_create(
-            employee_id=profile["employee_id"],
-            defaults={
-                "email": profile["email"],
-                "username": username,
-                "name": profile["name"],
-                "phone": profile.get("phone", ""),
-                "department": profile.get("department", ""),
-                "position": profile.get("position", ""),
-                "avatar_url": profile.get("avatar_base64", ""),
-                "central_access_token": token,
-                "is_active": True,
-            },
-        )
+        # Map central profile fields to our model fields
+        incoming = {
+            "central_id": profile["id"],
+            "email": profile["email"],
+            "username": profile["email"].split("@")[0],
+            "name": profile["name"],
+            "phone": profile.get("phone", ""),
+            "department": profile.get("department", ""),
+            "position": profile.get("position", ""),
+            "avatar_url": profile.get("avatar_base64", ""),
+        }
 
-        if created:
+        try:
+            user = User.objects.get(employee_id=employee_id)
+
+            # Check if anything changed — compare field by field
+            changed = {
+                field: value
+                for field, value in incoming.items()
+                if getattr(user, field) != value
+            }
+
+            # Always update token regardless — it changes on every login
+            changed["central_access_token"] = token
+
+            if len(changed) > 1:  # more than just token changed
+                for field, value in changed.items():
+                    setattr(user, field, value)
+                user.save(update_fields=list(changed.keys()) + ["updated_at"])
+                logger.info(
+                    "User profile synced | user_id=%s changed_fields=%s",
+                    user.pk,
+                    list(changed.keys()),
+                )
+            else:
+                # Only token changed — update just that, cheapest possible write
+                User.objects.filter(pk=user.pk).update(central_access_token=token)
+
+        except User.DoesNotExist:
+            # First time this user hits any endpoint — create immediately
+            user = User.objects.create(
+                employee_id=employee_id,
+                central_access_token=token,
+                is_active=True,
+                **incoming,
+            )
             logger.info(
-                "New user mirrored from central | user_id=%s email=%s",
+                "New user created on first request | user_id=%s email=%s",
                 user.pk,
                 user.email,
             )

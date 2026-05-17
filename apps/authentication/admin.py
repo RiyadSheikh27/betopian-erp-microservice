@@ -49,6 +49,7 @@ class UserAdmin(BaseUserAdmin):
             "Basic Information",
             {
                 "fields": (
+                    "central_id",
                     "id",
                     "employee_id",
                     "username",
