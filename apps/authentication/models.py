@@ -8,6 +8,7 @@ from django.db import models
 
 """ Custom user model for central ERP users. Read-only mirror of central auth data. """
 
+
 class UserManager(BaseUserManager):
     def create_superuser(self, email, password=None, **extra_fields):
         """
@@ -29,6 +30,7 @@ class UserManager(BaseUserManager):
         user.save(using=self._db)
         return user
 
+
 class User(AbstractBaseUser, PermissionsMixin):
     """
     Read-only mirror of the central ERP user.
@@ -46,7 +48,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     phone = models.CharField(max_length=20, blank=True)
     department = models.CharField(max_length=150, blank=True)
     position = models.CharField(max_length=150, blank=True)
-    avatar_url = models.URLField(max_length=500, blank=True, null=True)
+    avatar_url = models.URLField(max_length=10000, blank=True, null=True)
 
     # Only set for Django admin superusers, never for central auth users
     password = models.CharField(max_length=128, blank=True, null=True)

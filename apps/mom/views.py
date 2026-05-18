@@ -26,7 +26,12 @@ def _central_id(request):
     return request.user.central_id
 
 
+""" Views for Meeting and Notes (MoM) microservice. """
+
+
 class GeneralNoteListCreateView(APIView):
+    """List and create standalone general notes (not tied to any meeting)."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -53,6 +58,8 @@ class GeneralNoteListCreateView(APIView):
 
 
 class GeneralNoteDetailView(APIView):
+    """Retrieve, update or delete a general note. Only the owner can access their notes."""
+
     permission_classes = [IsAuthenticated]
 
     def _get_own(self, pk, request):
@@ -92,6 +99,8 @@ class GeneralNoteDetailView(APIView):
 
 
 class MeetingListCreateView(APIView):
+    """List all meetings for the user and create new meeting."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -131,6 +140,8 @@ class MeetingListCreateView(APIView):
 
 
 class MeetingDetailView(APIView):
+    """Retrieve, update or delete a meeting."""
+
     permission_classes = [IsAuthenticated]
 
     def _get_meeting_as_participant(self, pk, request):
@@ -196,8 +207,8 @@ class MeetingDetailView(APIView):
 
     def delete(self, request, pk):
         """
-        Creator  → hard deletes meeting and everything under it.
-        Participant → removes only themselves from participant list.
+        Creator - hard deletes meeting and everything under it.
+        Participant - removes only themselves from participant list.
         """
         cid = _central_id(request)
 
@@ -227,7 +238,7 @@ class MeetingDetailView(APIView):
 
 
 class AgendaItemCreateView(APIView):
-    """Creator only — add agenda item to a meeting."""
+    """Creator only - add agenda item to a meeting."""
 
     permission_classes = [IsAuthenticated]
 
@@ -260,7 +271,7 @@ class AgendaItemCreateView(APIView):
 
 
 class AgendaItemDetailView(APIView):
-    """Creator only — update or delete agenda item."""
+    """Creator only - update or delete agenda item."""
 
     permission_classes = [IsAuthenticated]
 
@@ -305,7 +316,7 @@ class AgendaItemDetailView(APIView):
 
 
 class MeetingNoteCreateView(APIView):
-    """Any participant can add a note. Write-once — no edit or delete."""
+    """Any participant can add a note. Write-once - no edit or delete."""
 
     permission_classes = [IsAuthenticated]
 
@@ -338,7 +349,7 @@ class MeetingNoteCreateView(APIView):
 
 
 class MeetingNoteDetailView(APIView):
-    """Owner only — edit or delete own meeting note."""
+    """Owner only - edit or delete own meeting note."""
 
     permission_classes = [IsAuthenticated]
 

@@ -58,9 +58,6 @@ interactions_urlpatterns = [
     path("comment/<str:target_type>/<uuid:pk>/<uuid:comment_id>/", CommentDetailView.as_view(), name="comment-detail"),
 ]
 
-from django.urls import path
-import uuid
-
 mom_urlpatterns = [
     # General notes
     path("notes/", GeneralNoteListCreateView.as_view(), name="mom-note-list-create"),
@@ -83,7 +80,6 @@ mom_urlpatterns = [
 ]
 
  
-
 urlpatterns = [
     *auth_urlpatterns,
     *contents_urlpatterns,

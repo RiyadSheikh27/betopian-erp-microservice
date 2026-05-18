@@ -17,6 +17,8 @@ ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="*").split(",")
 """ Application definition """
 
 INSTALLED_APPS = [
+    "unfold.contrib.filters",
+    "unfold.contrib.forms",
     "jazzmin",
     "django.contrib.admin",
     "django.contrib.auth",
@@ -127,6 +129,7 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_DIRS = [BASE_DIR / "static"]
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
@@ -237,9 +240,14 @@ SPECTACULAR_SETTINGS = {
 
 """Simple and classic Jazzmin admin interface settings"""
 JAZZMIN_SETTINGS = {
+    # ── Branding ──
     "site_title": "Betopian Admin",
     "site_header": "Betopian Administration",
     "site_brand": "Betopian",
+    # ── Custom assets ──
+    "custom_css": "admin/css/betopian.css",
+    "custom_js": "admin/js/betopian.js",
+    # ── Sidebar ──
     "show_sidebar": True,
     "navigation_expanded": False,
     "order_with_respect_to": [
@@ -247,11 +255,13 @@ JAZZMIN_SETTINGS = {
         "auth.user",
         "auth.group",
     ],
+    # ── Icons ──
     "icons": {
         "auth": "fas fa-users-cog",
         "auth.user": "fas fa-user",
         "auth.group": "fas fa-users",
     },
+    # ── Custom links ──
     "custom_links": {
         "auth": [
             {
@@ -261,23 +271,25 @@ JAZZMIN_SETTINGS = {
             }
         ]
     },
+    # ── Misc ──
     "related_modal_active": True,
     "show_ui_builder": False,
 }
+
 JAZZMIN_UI_TWEAKS = {
-    "theme": "flatly",
-    "navbar": "navbar-dark navbar-primary",
-    "sidebar": "sidebar-dark-primary",
+    "theme": "flatly",  # light theme (you can also try "litera" or "cosmo")
+    "navbar": "navbar-light",
+    "sidebar": "sidebar-light-primary",
     "accent": "accent-primary",
-    "brand_colour": "navbar-primary",
+    "brand_colour": False,
     "sidebar_nav_small_text": False,
     "sidebar_disable_expand": False,
     "sidebar_nav_child_indent": True,
-    "sidebar_nav_compact_style": False,
+    "sidebar_nav_compact_style": True,
     "theme_switcher": False,
     "actions_sticky_top": True,
+    "navigation_expanded": True,
 }
-
 import sentry_sdk
 
 sentry_sdk.init(

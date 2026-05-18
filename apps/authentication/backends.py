@@ -87,7 +87,7 @@ class CentralTokenAuthentication(BaseAuthentication):
             "phone": profile.get("phone", ""),
             "department": profile.get("department", ""),
             "position": profile.get("position", ""),
-            "avatar_url": profile.get("avatar_base64", ""),
+            "avatar_url": profile.get("avatar_url", ""),
         }
 
         try:

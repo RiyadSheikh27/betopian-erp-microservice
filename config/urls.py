@@ -7,15 +7,17 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
     SpectacularRedocView,
 )
-
+from django.shortcuts import redirect
 
 def trigger_error(request):
     division_by_zero = 1 / 0
 
-
+def redirect_admin(request):
+    return redirect('/') 
 urlpatterns = [
-    path("admin/", admin.site.urls),
     path("api/v1/", include("apps.apis.urls")),
+    path('admin/', redirect_admin), 
+    path("", admin.site.urls),
     # Schema & Docs
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(
@@ -28,3 +30,4 @@ urlpatterns = [
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.BASE_DIR / "static") 

@@ -1,12 +1,12 @@
 from django.db import models
 from apps.utils.models import TimeStampedModel
 
+""" Models for Meeting and Notes (MoM) microservice. """
 
 class Meeting(TimeStampedModel):
     """
     A meeting created by a central ERP user.
-    creator_central_id — central user ID of who created the meeting.
-    No FK to local User model — MOM is auth-independent from social media.
+    creator_central_id - central user ID of who created the meeting.
     """
 
     creator_central_id = models.BigIntegerField(db_index=True)
@@ -27,12 +27,7 @@ class Meeting(TimeStampedModel):
 
 
 class MeetingParticipant(TimeStampedModel):
-    """
-    Links a central user to a meeting.
-    - Creator is also added as a participant on meeting creation.
-    - Participant can remove themselves (soft via is_active=False).
-    - Creator delete cascades — hard deletes the meeting and all participants.
-    """
+    """ Links a central user to a meeting. """
 
     meeting = models.ForeignKey(
         Meeting, on_delete=models.CASCADE, related_name="participants"
@@ -49,7 +44,6 @@ class MeetingParticipant(TimeStampedModel):
             )
         ]
         indexes = [
-            # Fast lookup — all meetings for a specific user
             models.Index(
                 fields=["central_id", "-created_at"], name="idx_participant_user"
             ),
@@ -77,10 +71,7 @@ class AgendaItem(TimeStampedModel):
 
 
 class MeetingNote(TimeStampedModel):
-    """
-    Write-once notes attached to a meeting.
-    No edit or delete — intentional audit trail.
-    """
+    """ Write-once notes attached to a meeting. """
 
     meeting = models.ForeignKey(Meeting, on_delete=models.CASCADE, related_name="notes")
     description = models.TextField()
@@ -95,7 +86,7 @@ class MeetingNote(TimeStampedModel):
 
 
 class GeneralNote(TimeStampedModel):
-    """Standalone note — not tied to any meeting."""
+    """ Standalone note — not tied to any meeting."""
 
     owner_central_id = models.BigIntegerField(db_index=True)
     title = models.CharField(max_length=255)

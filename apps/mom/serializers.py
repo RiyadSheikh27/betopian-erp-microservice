@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import Meeting, MeetingParticipant, AgendaItem, MeetingNote, GeneralNote
 
+""" Serializers for Meeting and Notes (MoM) microservice. """
 
 class GeneralNoteSerializer(serializers.ModelSerializer):
     class Meta:
@@ -27,15 +28,16 @@ class AgendaItemUpdateSerializer(serializers.ModelSerializer):
         model = AgendaItem
         fields = ("title", "is_done")
 
+
 class MeetingNoteSerializer(serializers.ModelSerializer):
     class Meta:
-        model  = MeetingNote
+        model = MeetingNote
         fields = ("id", "description", "created_by_central_id", "created_at")
         read_only_fields = ("id", "created_by_central_id", "created_at")
 
 
 class MeetingListSerializer(serializers.ModelSerializer):
-    """Compact meeting list — summary counts only, no nested items."""
+    """Compact meeting list - summary counts only, no nested items."""
 
     participants = serializers.SerializerMethodField()
     total_people = serializers.SerializerMethodField()
@@ -78,7 +80,7 @@ class MeetingListSerializer(serializers.ModelSerializer):
 
 
 class MeetingDetailSerializer(MeetingListSerializer):
-    """Full meeting detail — includes agenda items, notes and all-meetings stats."""
+    """Full meeting detail - includes agenda items, notes and all-meetings stats."""
 
     agenda_items = AgendaItemSerializer(many=True, read_only=True)
     notes = MeetingNoteSerializer(many=True, read_only=True)
@@ -136,7 +138,7 @@ class MeetingCreateSerializer(serializers.ModelSerializer):
             creator_central_id=creator_id, **validated_data
         )
 
-        # Add creator + all participants — deduplicate in case creator added themselves
+        # Add creator + all participants - deduplicate in case creator added themselves
         participant_ids = set(participants) | {creator_id}
         MeetingParticipant.objects.bulk_create(
             [
@@ -154,7 +156,7 @@ class MeetingCreateSerializer(serializers.ModelSerializer):
 class MeetingUpdateSerializer(serializers.ModelSerializer):
     """
     Creator only. participants replaces the full list when provided.
-    Creator is always kept — cannot remove themselves via this endpoint.
+    Creator is always kept - cannot remove themselves via this endpoint.
     """
 
     participants = serializers.ListField(
@@ -174,7 +176,7 @@ class MeetingUpdateSerializer(serializers.ModelSerializer):
         instance.save()
 
         if participants is not None:
-            # Replace participant list — always keep creator
+            # Replace participant list - always keep creator
             participant_ids = set(participants) | {creator_id}
             instance.participants.exclude(central_id__in=participant_ids).delete()
             existing = set(instance.participants.values_list("central_id", flat=True))
@@ -196,7 +198,7 @@ class NotesTabSerializer(serializers.Serializer):
     """Unified shape for general notes and meeting notes combined."""
 
     id = serializers.UUIDField()
-    source = serializers.CharField()  # "general" | "meeting"
+    source = serializers.CharField()
     meeting_id = serializers.UUIDField(allow_null=True)
     meeting_title = serializers.CharField(allow_null=True)
     title = serializers.CharField(allow_null=True)
