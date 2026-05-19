@@ -20,6 +20,7 @@ from apps.mom.views import (
     MeetingListCreateView, MeetingDetailView, MeetingPinToggleView,
     AgendaItemCreateView, AgendaItemDetailView,
     MeetingNoteCreateView, MeetingNoteDetailView, MeetingNotePinToggleView,
+    MeetingParticipantView,
     NotesTabView,
 )
 
@@ -68,6 +69,10 @@ mom_urlpatterns = [
     path("meetings/", MeetingListCreateView.as_view(), name="mom-meeting-list-create"),
     path("meetings/<uuid:pk>/", MeetingDetailView.as_view(), name="mom-meeting-detail"),
     path("meetings/<uuid:pk>/pin/", MeetingPinToggleView.as_view(), name="mom-meeting-pin"),
+
+    # Participants
+    path("meetings/<uuid:pk>/participants/", MeetingParticipantView.as_view(), name="mom-meeting-participants-add"),
+    path("meetings/<uuid:pk>/participants/<int:central_id>/", MeetingParticipantView.as_view(), name="mom-meeting-participants-remove"),
 
     # Agenda items
     path("meetings/<uuid:pk>/agenda/", AgendaItemCreateView.as_view(), name="mom-agenda-create"),

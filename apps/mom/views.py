@@ -594,10 +594,11 @@ class MeetingNotePinToggleView(APIView):
 
 class NotesTabView(APIView):
     """
+    GET /notes-tab/  – unified list of all notes (general + meeting) for the
     authenticated user, sorted pinned-first then oldest-first.
 
     Query params:
-      search - filter by title / description for general notes, and by
+      search – filter by title / description for general notes, and by
                description / meeting title for meeting notes.
     """
 
@@ -651,3 +652,114 @@ class NotesTabView(APIView):
 
         unified.sort(key=lambda x: (not x["is_pinned"], x["created_at"]))
         return APIResponse.success(data=NotesTabSerializer(unified, many=True).data)
+
+
+# ---------------------------------------------------------------------------
+# Meeting Participants
+# ---------------------------------------------------------------------------
+
+
+class MeetingParticipantView(APIView):
+    """
+    POST   /meetings/<pk>/participants/                  – add participants (creator only).
+    DELETE /meetings/<pk>/participants/<int:central_id>/ – remove a participant (creator only).
+
+    Rules:
+      - The creator cannot remove themselves.
+      - Adding an already-existing participant is a no-op (not an error).
+      - Profiles are fetched from the central API and cached on create.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def _get_meeting_as_creator(self, pk, request):
+        try:
+            return Meeting.objects.prefetch_related("participants").get(
+                pk=pk, creator_central_id=_central_id(request)
+            )
+        except Meeting.DoesNotExist:
+            return None
+
+    def patch(self, request, pk):
+        """Add one or more participants by central_id list."""
+        meeting = self._get_meeting_as_creator(pk, request)
+        if not meeting:
+            return APIResponse.error(
+                message="Meeting not found or you are not the creator.", status_code=404
+            )
+
+        central_ids = request.data.get("participants", [])
+        if not isinstance(central_ids, list) or not central_ids:
+            return APIResponse.error(
+                message="'participants' must be a non-empty list of central_id integers.",
+                status_code=400,
+            )
+        if not all(isinstance(i, int) for i in central_ids):
+            return APIResponse.error(
+                message="All values in 'participants' must be integers.",
+                status_code=400,
+            )
+
+        existing_ids = set(meeting.participants.values_list("central_id", flat=True))
+        new_ids = set(central_ids) - existing_ids
+
+        if new_ids:
+            token, session_id = _credentials(request)
+            profiles = fetch_central_profiles_bulk(list(new_ids), token, session_id)
+            MeetingParticipant.objects.bulk_create(
+                [
+                    MeetingParticipant(
+                        meeting=meeting,
+                        central_id=cid,
+                        is_creator=False,
+                        **(
+                            _profile_to_participant_fields(profiles.get(cid))
+                            if profiles.get(cid)
+                            else {}
+                        ),
+                    )
+                    for cid in new_ids
+                ]
+            )
+            logger.info(
+                "Participants added | meeting_id=%s added=%s", meeting.pk, list(new_ids)
+            )
+
+        meeting = Meeting.objects.prefetch_related(
+            "participants", "agenda_items", "notes"
+        ).get(pk=meeting.pk)
+        context = _build_meeting_context(request, [meeting])
+
+        return APIResponse.success(
+            data=MeetingDetailSerializer(meeting, context=context).data,
+            message=(
+                f"{len(new_ids)} participant(s) added."
+                if new_ids
+                else "No new participants to add."
+            ),
+        )
+
+    def delete(self, request, pk, central_id):
+        """Remove a single participant by their central_id."""
+        meeting = self._get_meeting_as_creator(pk, request)
+        if not meeting:
+            return APIResponse.error(
+                message="Meeting not found or you are not the creator.", status_code=404
+            )
+
+        if central_id == _central_id(request):
+            return APIResponse.error(
+                message="You cannot remove yourself as the creator.", status_code=400
+            )
+
+        deleted, _ = MeetingParticipant.objects.filter(
+            meeting=meeting, central_id=central_id
+        ).delete()
+
+        if not deleted:
+            return APIResponse.error(message="Participant not found.", status_code=404)
+
+        logger.info(
+            "Participant removed | meeting_id=%s central_id=%s", meeting.pk, central_id
+        )
+        return APIResponse.success(message="Participant removed.")
