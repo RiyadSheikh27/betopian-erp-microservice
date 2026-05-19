@@ -23,6 +23,7 @@ from apps.mom.views import (
     MeetingParticipantView,
     NotesTabView,
 )
+from apps.ebook.views import EbookTitleListView, EbookListView
 
 utils_urlpatterns = [
     path("upload-profile-image/", ProfileImageUploadView.as_view(), name="upload-profile-image"),
@@ -86,6 +87,12 @@ mom_urlpatterns = [
     # Notes tab
     path("notes-tab/", NotesTabView.as_view(), name="mom-notes-tab"),
 ]
+
+
+ebook_urlpatterns = [
+    path("ebook-titles/", EbookTitleListView.as_view(), name="ebook-title-list"),
+    path("ebooks/", EbookListView.as_view(), name="ebook-list"),
+]
  
 urlpatterns = [
     *auth_urlpatterns,
@@ -94,4 +101,5 @@ urlpatterns = [
     *interactions_urlpatterns,
     *utils_urlpatterns,
     *mom_urlpatterns,
+    *ebook_urlpatterns,
 ]

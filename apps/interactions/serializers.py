@@ -30,6 +30,7 @@ class CommentAuthorSerializer(serializers.Serializer):
     """Minimal author info on each comment."""
 
     user_id = serializers.UUIDField(source="id")
+    central_id = serializers.IntegerField(read_only=True)
     name = serializers.CharField()
     avatar_url = serializers.URLField()
 

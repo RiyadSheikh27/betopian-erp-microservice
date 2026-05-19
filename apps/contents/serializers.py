@@ -25,6 +25,7 @@ class PostAuthorSerializer(serializers.Serializer):
     """Author's basic information — mirrors central ERP user fields."""
 
     id = serializers.UUIDField()
+    central_id = serializers.IntegerField()
     username = serializers.CharField()
     name = serializers.CharField()
     department = serializers.CharField()
@@ -37,11 +38,21 @@ class PostMediaSerializer(serializers.ModelSerializer):
 
     url = serializers.SerializerMethodField()
     likes_count = serializers.IntegerField(read_only=True, default=0)
+    is_liked = serializers.BooleanField(read_only=True, default=False)
     comment_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = PostMedia
-        fields = ("id", "url", "media_type", "caption", "order", "likes_count", "comment_count")
+        fields = (
+            "id",
+            "url",
+            "media_type",
+            "caption",
+            "order",
+            "likes_count",
+            "is_liked",
+            "comment_count",
+        )
 
     def get_url(self, obj):
         request = self.context.get("request")
@@ -49,13 +60,12 @@ class PostMediaSerializer(serializers.ModelSerializer):
 
 
 class PostSerializer(serializers.ModelSerializer):
-    """Read serializer for a post."""
-
     author = PostAuthorSerializer(read_only=True)
     media = PostMediaSerializer(many=True, read_only=True)
     media_count = serializers.IntegerField(read_only=True)
-    likes_count = serializers.IntegerField(read_only=True, default=0)
+    like_count = serializers.IntegerField(read_only=True, default=0)
     comment_count = serializers.IntegerField(read_only=True, default=0)
+    is_liked = serializers.BooleanField(read_only=True, default=False)  # ADD
 
     class Meta:
         model = Post
@@ -67,8 +77,9 @@ class PostSerializer(serializers.ModelSerializer):
             "is_edited",
             "media",
             "media_count",
-            "likes_count",
+            "like_count",
             "comment_count",
+            "is_liked",  # ADD
             "created_at",
             "updated_at",
         )
@@ -222,12 +233,11 @@ class PostUpdateSerializer(serializers.ModelSerializer):
 
 
 class ReelSerializer(serializers.ModelSerializer):
-    """Read serializer for a reel."""
-
     author = PostAuthorSerializer(read_only=True)
     video_url = serializers.SerializerMethodField()
-    likes_count = serializers.IntegerField(read_only=True, default=0)
+    like_count = serializers.IntegerField(read_only=True, default=0)
     comment_count = serializers.IntegerField(read_only=True, default=0)
+    is_liked = serializers.BooleanField(read_only=True, default=False)  
 
     class Meta:
         model = Reel
@@ -238,8 +248,9 @@ class ReelSerializer(serializers.ModelSerializer):
             "video_url",
             "privacy",
             "view_count",
-            "likes_count",
+            "like_count",
             "comment_count",
+            "is_liked",  
             "is_edited",
             "created_at",
             "updated_at",

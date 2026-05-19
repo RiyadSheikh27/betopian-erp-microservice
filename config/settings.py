@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "apps.feed",
     "apps.interactions",
     "apps.mom",
+    "apps.ebook",
 ]
 
 MIDDLEWARE = [

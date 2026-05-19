@@ -1,10 +1,10 @@
 import base64
 import logging
 
-from django.db.models import Count, F, Prefetch
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
+from django.db.models import Count, F, Prefetch, Exists, OuterRef
 
 from apps.utils.response import APIResponse
 from .models import Post, PostMedia, Reel
@@ -65,10 +65,14 @@ def _paginate_cursor(queryset, page_size):
     return items, has_more, next_cursor
 
 
-def _post_queryset():
-    return (
-        Post.objects.select_related("author")
-        .prefetch_related(Prefetch("media", queryset=_annotated_media_qs()))
+def _post_queryset(user=None):
+    from django.contrib.contenttypes.models import ContentType
+    from apps.interactions.models import Like
+
+    qs = (
+        Post.objects
+        .select_related("author")
+        .prefetch_related(Prefetch("media", queryset=_annotated_media_qs(user)))
         .annotate(
             media_count=Count("media", distinct=True),
             like_count=Count("likes", distinct=True),
@@ -77,10 +81,26 @@ def _post_queryset():
         .order_by("-created_at", "-id")
     )
 
+    if user:
+        post_ct = ContentType.objects.get_for_model(Post)
+        qs = qs.annotate(
+            is_liked=Exists(
+                Like.objects.filter(
+                    content_type=post_ct,
+                    object_id=OuterRef("pk"),
+                    user=user,
+                )
+            )
+        )
+    return qs
 
-def _reel_queryset():
-    return (
-        Reel.objects.select_related("author")
+def _reel_queryset(user=None):
+    from django.contrib.contenttypes.models import ContentType
+    from apps.interactions.models import Like
+
+    qs = (
+        Reel.objects
+        .select_related("author")
         .annotate(
             like_count=Count("likes", distinct=True),
             comment_count=Count("comments", distinct=True),
@@ -88,6 +108,18 @@ def _reel_queryset():
         .order_by("-created_at", "-id")
     )
 
+    if user:
+        reel_ct = ContentType.objects.get_for_model(Reel)
+        qs = qs.annotate(
+            is_liked=Exists(
+                Like.objects.filter(
+                    content_type=reel_ct,
+                    object_id=OuterRef("pk"),
+                    user=user,
+                )
+            )
+        )
+    return qs
 
 def _parse_page_size(request, default=10):
     try:
@@ -96,11 +128,27 @@ def _parse_page_size(request, default=10):
         return default
 
 
-def _annotated_media_qs():
-    return PostMedia.objects.annotate(
+def _annotated_media_qs(user=None):
+    from django.contrib.contenttypes.models import ContentType
+    from apps.interactions.models import Like
+
+    qs = PostMedia.objects.annotate(
         like_count=Count("likes", distinct=True),
         comment_count=Count("comments", distinct=True),
     ).order_by("order")
+
+    if user:
+        media_ct = ContentType.objects.get_for_model(PostMedia)
+        qs = qs.annotate(
+            is_liked=Exists(
+                Like.objects.filter(
+                    content_type=media_ct,
+                    object_id=OuterRef("pk"),
+                    user=user,
+                )
+            )
+        )
+    return qs
 
 
 """ POST SECTION VIEWS"""
