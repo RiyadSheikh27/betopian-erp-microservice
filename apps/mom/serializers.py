@@ -1,13 +1,23 @@
 from rest_framework import serializers
+
 from .models import Meeting, MeetingParticipant, AgendaItem, MeetingNote, GeneralNote
 
-""" Serializers for Meeting and Notes (MoM) microservice. """
+
+# ---------------------------------------------------------------------------
+# General Notes
+# ---------------------------------------------------------------------------
+
 
 class GeneralNoteSerializer(serializers.ModelSerializer):
     class Meta:
         model = GeneralNote
-        fields = ("id", "title", "description", "created_at", "updated_at")
-        read_only_fields = ("id", "created_at", "updated_at")
+        fields = ("id", "title", "description", "is_pinned", "created_at", "updated_at")
+        read_only_fields = ("id", "is_pinned", "created_at", "updated_at")
+
+
+# ---------------------------------------------------------------------------
+# Agenda Items
+# ---------------------------------------------------------------------------
 
 
 class AgendaItemSerializer(serializers.ModelSerializer):
@@ -29,26 +39,70 @@ class AgendaItemUpdateSerializer(serializers.ModelSerializer):
         fields = ("title", "is_done")
 
 
+# ---------------------------------------------------------------------------
+# Meeting Notes
+# ---------------------------------------------------------------------------
+
+
 class MeetingNoteSerializer(serializers.ModelSerializer):
     class Meta:
         model = MeetingNote
-        fields = ("id", "description", "created_by_central_id", "created_at")
-        read_only_fields = ("id", "created_by_central_id", "created_at")
+        fields = ("id", "description", "created_by_central_id", "is_pinned", "created_at")
+        read_only_fields = ("id", "created_by_central_id", "is_pinned", "created_at")
+
+
+# ---------------------------------------------------------------------------
+# Participants (read-only, used inside meeting serializers)
+# ---------------------------------------------------------------------------
+
+
+class ParticipantSerializer(serializers.Serializer):
+    """
+    Read-only representation of a meeting participant.
+
+    Profile data is merged from two sources (priority order):
+      1. Live profile fetched from the central employee-directory API
+         (passed via serializer context as ``participant_profiles``).
+      2. Cached fields stored on the ``MeetingParticipant`` row itself.
+
+    This means the list will always show *something* even when the central
+    API is unavailable, and will automatically pick up live data when it is.
+    """
+
+    central_id = serializers.IntegerField()
+    employee_id = serializers.CharField()
+    name = serializers.CharField()
+    designation = serializers.CharField()
+    avatar_url = serializers.CharField()
+    is_creator = serializers.BooleanField()
+
+
+# ---------------------------------------------------------------------------
+# Meetings – list
+# ---------------------------------------------------------------------------
 
 
 class MeetingListSerializer(serializers.ModelSerializer):
-    """Compact meeting list - summary counts only, no nested items."""
+    """
+    Compact meeting representation used in list endpoints.
+
+    Context expected from the view:
+      - ``participant_profiles``: dict[str(meeting_id), dict[central_id, profile]]
+      - ``pinned_meeting_ids``:   set[UUID]
+    """
 
     participants = serializers.SerializerMethodField()
     total_people = serializers.SerializerMethodField()
     agenda_done = serializers.SerializerMethodField()
     agenda_total = serializers.SerializerMethodField()
     agenda_completion_percent = serializers.SerializerMethodField()
+    is_pinned = serializers.SerializerMethodField()
 
     class Meta:
         model = Meeting
         fields = (
             "id",
+            "creator_central_id",
             "title",
             "scheduled_at",
             "location",
@@ -57,11 +111,57 @@ class MeetingListSerializer(serializers.ModelSerializer):
             "agenda_done",
             "agenda_total",
             "agenda_completion_percent",
+            "is_pinned",
             "created_at",
         )
 
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _live_profile(self, meeting_id, central_id):
+        """Return the live profile dict for one participant, or {}."""
+        all_profiles = self.context.get("participant_profiles", {})
+        return all_profiles.get(str(meeting_id), {}).get(central_id) or {}
+
+    # ------------------------------------------------------------------
+    # Field methods
+    # ------------------------------------------------------------------
+
     def get_participants(self, obj):
-        return list(obj.participants.values_list("central_id", flat=True))
+        creator_id = obj.creator_central_id
+        result = []
+
+        for participant in obj.participants.all():
+            profile = self._live_profile(obj.id, participant.central_id)
+
+            name = (
+                profile.get("name")
+                or participant.username
+                or f"User {participant.central_id}"
+            )
+            if participant.central_id == creator_id:
+                name = f"{name} (Meeting Creator)"
+
+            result.append(
+                {
+                    "central_id": participant.central_id,
+                    "employee_id": profile.get("employee_code") or participant.employee_id or "",
+                    "name": name,
+                    "designation": (
+                        profile.get("job_title")
+                        or profile.get("department")
+                        or participant.designation
+                        or ""
+                    ),
+                    "avatar_url": profile.get("avatar_url") or participant.avatar_url or "",
+                    "is_creator": participant.central_id == creator_id,
+                }
+            )
+
+        # Creator always first
+        result.sort(key=lambda x: not x["is_creator"])
+        return result
 
     def get_total_people(self, obj):
         return obj.participants.count()
@@ -76,11 +176,23 @@ class MeetingListSerializer(serializers.ModelSerializer):
         total = obj.agenda_items.count()
         if not total:
             return 0
-        return round((obj.agenda_items.filter(is_done=True).count() / total) * 100)
+        done = obj.agenda_items.filter(is_done=True).count()
+        return round((done / total) * 100)
+
+    def get_is_pinned(self, obj):
+        return obj.id in self.context.get("pinned_meeting_ids", set())
+
+
+# ---------------------------------------------------------------------------
+# Meetings – detail
+# ---------------------------------------------------------------------------
 
 
 class MeetingDetailSerializer(MeetingListSerializer):
-    """Full meeting detail - includes agenda items, notes and all-meetings stats."""
+    """
+    Full meeting representation including agenda items, notes, and a
+    cross-meeting agenda summary for the requesting user.
+    """
 
     agenda_items = AgendaItemSerializer(many=True, read_only=True)
     notes = MeetingNoteSerializer(many=True, read_only=True)
@@ -95,12 +207,9 @@ class MeetingDetailSerializer(MeetingListSerializer):
         )
 
     def get_all_meetings_agenda(self, obj):
-        """
-        Aggregated agenda stats across ALL meetings the requesting user is part of.
-        Used for the summary bar in the UI.
-        """
+        """Aggregate agenda stats across every meeting the current user belongs to."""
         request = self.context.get("request")
-        central_id = getattr(request.user, "central_id", None)
+        central_id = getattr(request.user, "central_id", None) if request else None
         if not central_id:
             return None
 
@@ -122,85 +231,132 @@ class MeetingDetailSerializer(MeetingListSerializer):
         }
 
 
-class MeetingCreateSerializer(serializers.ModelSerializer):
+# ---------------------------------------------------------------------------
+# Meetings – write
+# ---------------------------------------------------------------------------
+
+
+class MeetingWriteSerializer(serializers.ModelSerializer):
+    """
+    Shared base for create / update.  Subclasses implement ``save`` logic.
+
+    ``participants`` accepts a list of **central_id** integers.  The creator
+    is always added automatically; duplicates in the payload are ignored.
+    """
+
     participants = serializers.ListField(
-        child=serializers.IntegerField(), required=False, default=list
+        child=serializers.IntegerField(),
+        required=False,
+        default=list,
+        help_text="List of central_id integers. Creator is always included.",
     )
 
     class Meta:
         model = Meeting
         fields = ("title", "scheduled_at", "location", "participants")
 
+
+class MeetingCreateSerializer(MeetingWriteSerializer):
     def create(self, validated_data):
-        participants = validated_data.pop("participants", [])
+        from apps.authentication.backends import fetch_central_profiles_bulk
+
+        participant_ids = set(validated_data.pop("participants", [])) | {
+            self.context["central_id"]
+        }
         creator_id = self.context["central_id"]
+        token, session_id = self._credentials()
+
         meeting = Meeting.objects.create(
             creator_central_id=creator_id, **validated_data
         )
 
-        # Add creator + all participants - deduplicate in case creator added themselves
-        participant_ids = set(participants) | {creator_id}
+        profiles = fetch_central_profiles_bulk(list(participant_ids), token, session_id)
         MeetingParticipant.objects.bulk_create(
-            [
-                MeetingParticipant(
-                    meeting=meeting,
-                    central_id=cid,
-                    is_creator=(cid == creator_id),
-                )
-                for cid in participant_ids
-            ]
+            self._build_participant(meeting, cid, profiles.get(cid), creator_id)
+            for cid in participant_ids
         )
         return meeting
 
+    def _credentials(self):
+        request = self.context.get("request")
+        token = getattr(request.user, "central_access_token", "") if request else ""
+        session_id = request.COOKIES.get("session_id", "") if request else ""
+        return token, session_id
 
-class MeetingUpdateSerializer(serializers.ModelSerializer):
-    """
-    Creator only. participants replaces the full list when provided.
-    Creator is always kept - cannot remove themselves via this endpoint.
-    """
+    @staticmethod
+    def _build_participant(meeting, central_id, profile, creator_id):
+        from apps.mom.views import _profile_to_participant_fields
 
+        fields = _profile_to_participant_fields(profile) if profile else {}
+        return MeetingParticipant(
+            meeting=meeting,
+            central_id=central_id,
+            is_creator=(central_id == creator_id),
+            **fields,
+        )
+
+
+class MeetingUpdateSerializer(MeetingWriteSerializer):
     participants = serializers.ListField(
-        child=serializers.IntegerField(), required=False
+        child=serializers.IntegerField(),
+        required=False,
     )
 
-    class Meta:
-        model = Meeting
-        fields = ("title", "scheduled_at", "location", "participants")
-
     def update(self, instance, validated_data):
-        participants = validated_data.pop("participants", None)
+        from apps.authentication.backends import fetch_central_profiles_bulk
+        from apps.mom.views import _profile_to_participant_fields
+
+        participant_ids = validated_data.pop("participants", None)
         creator_id = self.context["central_id"]
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
 
-        if participants is not None:
-            # Replace participant list - always keep creator
-            participant_ids = set(participants) | {creator_id}
+        if participant_ids is not None:
+            participant_ids = set(participant_ids) | {creator_id}
+            token, session_id = self._credentials()
+
+            # Remove anyone no longer in the list
             instance.participants.exclude(central_id__in=participant_ids).delete()
-            existing = set(instance.participants.values_list("central_id", flat=True))
-            new_ids = participant_ids - existing
-            MeetingParticipant.objects.bulk_create(
-                [
+
+            existing_ids = set(
+                instance.participants.values_list("central_id", flat=True)
+            )
+            new_ids = participant_ids - existing_ids
+
+            if new_ids:
+                profiles = fetch_central_profiles_bulk(list(new_ids), token, session_id)
+                MeetingParticipant.objects.bulk_create(
                     MeetingParticipant(
                         meeting=instance,
                         central_id=cid,
                         is_creator=(cid == creator_id),
+                        **(_profile_to_participant_fields(profiles.get(cid)) if profiles.get(cid) else {}),
                     )
                     for cid in new_ids
-                ]
-            )
+                )
+
         return instance
+
+    def _credentials(self):
+        request = self.context.get("request")
+        token = getattr(request.user, "central_access_token", "") if request else ""
+        session_id = request.COOKIES.get("session_id", "") if request else ""
+        return token, session_id
+
+
+# ---------------------------------------------------------------------------
+# Notes Tab (unified view)
+# ---------------------------------------------------------------------------
 
 
 class NotesTabSerializer(serializers.Serializer):
-    """Unified shape for general notes and meeting notes combined."""
-
     id = serializers.UUIDField()
     source = serializers.CharField()
     meeting_id = serializers.UUIDField(allow_null=True)
     meeting_title = serializers.CharField(allow_null=True)
     title = serializers.CharField(allow_null=True)
     description = serializers.CharField()
+    is_pinned = serializers.BooleanField()
     created_at = serializers.DateTimeField()

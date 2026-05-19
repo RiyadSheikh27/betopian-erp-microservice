@@ -1,6 +1,6 @@
 import logging
-
 import requests
+
 from django.contrib.auth import get_user_model
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
@@ -9,6 +9,7 @@ User = get_user_model()
 logger = logging.getLogger("apps.authentication")
 
 CENTRAL_PROFILE_URL = "https://erp.betopiagroup.com/profiles/"
+CENTRAL_EMPLOYEE_URL = "https://erp.betopiagroup.com/employee-directory/"
 CENTRAL_TIMEOUT = 20
 
 
@@ -26,12 +27,6 @@ class CentralTokenAuthentication(BaseAuthentication):
         session_id = request.COOKIES.get("session_id", "")
         profile = self._fetch_profile(token, session_id)
         user = self._sync_user(profile, token)
-
-        logger.debug(
-            "Request authenticated | user_id=%s email=%s",
-            user.pk,
-            user.email,
-        )
         return (user, token)
 
     def _fetch_profile(self, token, session_id):
@@ -43,42 +38,26 @@ class CentralTokenAuthentication(BaseAuthentication):
                 timeout=CENTRAL_TIMEOUT,
             )
         except requests.Timeout:
-            logger.error("Central profile API timed out")
             raise AuthenticationFailed("Central auth service timed out. Try again.")
         except requests.RequestException as e:
-            logger.error("Central profile API unreachable | error=%s", str(e))
+            logger.error("Central profile API unreachable | error=%s", e)
             raise AuthenticationFailed("Central auth service unavailable.")
 
         if resp.status_code == 401:
             raise AuthenticationFailed("Invalid or expired token.")
         if resp.status_code == 403:
-            logger.warning("Central profile 403 — invalid session_id cookie")
             raise AuthenticationFailed("Session invalid. Please login again.")
         if resp.status_code == 500:
-            logger.error("Central profile returned 500 — server error on central ERP")
-            raise AuthenticationFailed(
-                "Central auth service is temporarily unavailable. Try again."
-            )
-
+            raise AuthenticationFailed("Central auth service is temporarily unavailable.")
         if resp.status_code != 200:
-            logger.error(
-                "Central profile returned %s | body=%s",
-                resp.status_code,
-                resp.text,
-            )
+            logger.error("Central profile returned %s | body=%s", resp.status_code, resp.text)
             raise AuthenticationFailed("Central auth service error.")
 
         return resp.json()
 
     def _sync_user(self, profile, token):
-        """
-        Create user on first hit — no prior login step needed.
-        On subsequent requests, only write to DB if something actually changed.
-        This prevents unnecessary DB writes on every request under high traffic.
-        """
         employee_id = profile["employee_id"]
 
-        # Map central profile fields to our model fields
         incoming = {
             "central_id": profile["id"],
             "email": profile["email"],
@@ -92,42 +71,95 @@ class CentralTokenAuthentication(BaseAuthentication):
 
         try:
             user = User.objects.get(employee_id=employee_id)
-
-            # Check if anything changed — compare field by field
-            changed = {
-                field: value
-                for field, value in incoming.items()
-                if getattr(user, field) != value
-            }
-
-            # Always update token regardless — it changes on every login
+            changed = {k: v for k, v in incoming.items() if getattr(user, k) != v}
             changed["central_access_token"] = token
 
-            if len(changed) > 1:  # more than just token changed
-                for field, value in changed.items():
-                    setattr(user, field, value)
+            if len(changed) > 1:
+                for k, v in changed.items():
+                    setattr(user, k, v)
                 user.save(update_fields=list(changed.keys()) + ["updated_at"])
-                logger.info(
-                    "User profile synced | user_id=%s changed_fields=%s",
-                    user.pk,
-                    list(changed.keys()),
-                )
+                logger.info("User synced | user_id=%s fields=%s", user.pk, list(changed.keys()))
             else:
-                # Only token changed — update just that, cheapest possible write
                 User.objects.filter(pk=user.pk).update(central_access_token=token)
 
         except User.DoesNotExist:
-            # First time this user hits any endpoint — create immediately
             user = User.objects.create(
                 employee_id=employee_id,
                 central_access_token=token,
                 is_active=True,
                 **incoming,
             )
-            logger.info(
-                "New user created on first request | user_id=%s email=%s",
-                user.pk,
-                user.email,
-            )
+            logger.info("New user created | user_id=%s email=%s", user.pk, user.email)
 
         return user
+
+
+def fetch_central_profile(central_id, token, session_id):
+    """
+    Fetch a single employee from central ERP by their ID.
+    The employee-directory API returns: {"employee": {...}}
+    Returns the flat employee dict, or None on failure.
+    """
+    url = f"{CENTRAL_EMPLOYEE_URL}{central_id}/"
+    try:
+        resp = requests.get(
+            url,
+            headers={"Authorization": f"Bearer {token}"},
+            cookies={"session_id": session_id} if session_id else {},
+            timeout=CENTRAL_TIMEOUT,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            # Unwrap {"employee": {...}} — fall back to flat dict if already flat
+            employee = data.get("employee") or data
+            logger.debug(
+                "Employee fetched | central_id=%s name=%s",
+                central_id,
+                employee.get("name", "?"),
+            )
+            return employee
+
+        logger.warning(
+            "Employee fetch failed | url=%s status=%s body=%s",
+            url,
+            resp.status_code,
+            resp.text[:200],
+        )
+        return None
+
+    except Exception as e:
+        logger.error("Employee fetch error | central_id=%s error=%s", central_id, e)
+        return None
+
+
+def fetch_central_profiles_bulk(central_ids, token, session_id):
+    """
+    Fetch multiple employee profiles in parallel.
+    Returns {central_id: employee_dict_or_None}
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    if not central_ids:
+        return {}
+
+    results = {}
+    with ThreadPoolExecutor(max_workers=min(len(central_ids), 10)) as executor:
+        futures = {
+            executor.submit(fetch_central_profile, cid, token, session_id): cid
+            for cid in central_ids
+        }
+        for future in as_completed(futures):
+            cid = futures[future]
+            try:
+                results[cid] = future.result()
+            except Exception as e:
+                logger.error("Bulk profile fetch error | central_id=%s error=%s", cid, e)
+                results[cid] = None
+
+    logger.info(
+        "Bulk employee fetch | requested=%d fetched=%d failed=%d",
+        len(central_ids),
+        sum(1 for v in results.values() if v),
+        sum(1 for v in results.values() if not v),
+    )
+    return results

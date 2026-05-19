@@ -16,10 +16,10 @@ from apps.interactions.views import (
 )
 from apps.utils.views import ProfileImageUploadView
 from apps.mom.views import (
-    GeneralNoteListCreateView, GeneralNoteDetailView,
-    MeetingListCreateView, MeetingDetailView,
+    GeneralNoteListCreateView, GeneralNoteDetailView, GeneralNotePinToggleView,
+    MeetingListCreateView, MeetingDetailView, MeetingPinToggleView,
     AgendaItemCreateView, AgendaItemDetailView,
-    MeetingNoteCreateView, MeetingNoteDetailView,
+    MeetingNoteCreateView, MeetingNoteDetailView, MeetingNotePinToggleView,
     NotesTabView,
 )
 
@@ -62,23 +62,25 @@ mom_urlpatterns = [
     # General notes
     path("notes/", GeneralNoteListCreateView.as_view(), name="mom-note-list-create"),
     path("notes/<uuid:pk>/", GeneralNoteDetailView.as_view(), name="mom-note-detail"),
+    path("notes/<uuid:pk>/pin/", GeneralNotePinToggleView.as_view(), name="mom-note-pin"),
 
     # Meetings
     path("meetings/", MeetingListCreateView.as_view(), name="mom-meeting-list-create"),
     path("meetings/<uuid:pk>/", MeetingDetailView.as_view(), name="mom-meeting-detail"),
+    path("meetings/<uuid:pk>/pin/", MeetingPinToggleView.as_view(), name="mom-meeting-pin"),
 
     # Agenda items
     path("meetings/<uuid:pk>/agenda/", AgendaItemCreateView.as_view(), name="mom-agenda-create"),
     path("meetings/<uuid:pk>/agenda/<uuid:item_id>/", AgendaItemDetailView.as_view(), name="mom-agenda-detail"),
 
-    # Meeting notes (write-once)
+    # Meeting notes
     path("meetings/<uuid:pk>/notes/", MeetingNoteCreateView.as_view(), name="mom-meeting-note-create"),
     path("meetings/<uuid:pk>/notes/<uuid:note_id>/", MeetingNoteDetailView.as_view(), name="mom-meeting-note-detail"),
+    path("meetings/<uuid:pk>/notes/<uuid:note_id>/pin/", MeetingNotePinToggleView.as_view(), name="mom-meeting-note-pin"),
 
     # Notes tab
     path("notes-tab/", NotesTabView.as_view(), name="mom-notes-tab"),
 ]
-
  
 urlpatterns = [
     *auth_urlpatterns,

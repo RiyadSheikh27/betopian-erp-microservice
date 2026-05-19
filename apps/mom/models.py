@@ -1,13 +1,9 @@
 from django.db import models
 from apps.utils.models import TimeStampedModel
 
-""" Models for Meeting and Notes (MoM) microservice. """
 
 class Meeting(TimeStampedModel):
-    """
-    A meeting created by a central ERP user.
-    creator_central_id - central user ID of who created the meeting.
-    """
+    """A scheduled meeting created by a central-system user."""
 
     creator_central_id = models.BigIntegerField(db_index=True)
     title = models.CharField(max_length=255)
@@ -18,21 +14,55 @@ class Meeting(TimeStampedModel):
         db_table = "mom_meetings"
         indexes = [
             models.Index(
-                fields=["creator_central_id", "-created_at"], name="idx_meeting_creator"
+                fields=["creator_central_id", "created_at"],
+                name="idx_meeting_creator",
             ),
         ]
 
     def __str__(self):
-        return f"{self.title} by {self.creator_central_id}"
+        return f"{self.title} (creator={self.creator_central_id})"
+
+
+class MeetingPin(TimeStampedModel):
+    """Tracks which meetings a user has pinned."""
+
+    meeting = models.ForeignKey(Meeting, on_delete=models.CASCADE, related_name="pins")
+    central_id = models.BigIntegerField(db_index=True)
+
+    class Meta(TimeStampedModel.Meta):
+        db_table = "mom_meeting_pins"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["meeting", "central_id"],
+                name="unique_pin_per_user_per_meeting",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Pin(meeting={self.meeting_id}, user={self.central_id})"
 
 
 class MeetingParticipant(TimeStampedModel):
-    """ Links a central user to a meeting. """
+    """
+    A participant in a meeting, identified by their central-system primary key.
+
+    Profile fields (employee_id, username, avatar_url, designation) are cached
+    locally to avoid hitting the central API on every list request.  They are
+    backfilled/refreshed lazily whenever a bulk profile fetch is performed.
+    """
 
     meeting = models.ForeignKey(
         Meeting, on_delete=models.CASCADE, related_name="participants"
     )
+    # The primary key used by the central ERP / employee-directory service.
     central_id = models.BigIntegerField(db_index=True)
+
+    # --- Cached profile fields (populated from employee-directory API) ---
+    employee_id = models.CharField(max_length=50, blank=True)
+    username = models.CharField(max_length=255, blank=True)
+    avatar_url = models.URLField(max_length=10_000, blank=True)
+    designation = models.CharField(max_length=255, blank=True)
+
     is_creator = models.BooleanField(default=False)
 
     class Meta(TimeStampedModel.Meta):
@@ -41,16 +71,17 @@ class MeetingParticipant(TimeStampedModel):
             models.UniqueConstraint(
                 fields=["meeting", "central_id"],
                 name="unique_participant_per_meeting",
-            )
+            ),
         ]
         indexes = [
             models.Index(
-                fields=["central_id", "-created_at"], name="idx_participant_user"
+                fields=["central_id", "created_at"],
+                name="idx_participant_user",
             ),
         ]
 
     def __str__(self):
-        return f"central_id={self.central_id} in {self.meeting.title}"
+        return f"{self.username or self.central_id} in '{self.meeting.title}'"
 
 
 class AgendaItem(TimeStampedModel):
@@ -67,39 +98,44 @@ class AgendaItem(TimeStampedModel):
         ordering = ["created_at"]
 
     def __str__(self):
-        return f"{self.title} ({'done' if self.is_done else 'pending'})"
+        status = "done" if self.is_done else "pending"
+        return f"{self.title} ({status})"
 
 
 class MeetingNote(TimeStampedModel):
-    """ Write-once notes attached to a meeting. """
+    """A note written by a participant during or after a meeting."""
 
-    meeting = models.ForeignKey(Meeting, on_delete=models.CASCADE, related_name="notes")
+    meeting = models.ForeignKey(
+        Meeting, on_delete=models.CASCADE, related_name="notes"
+    )
     description = models.TextField()
-    created_by_central_id = models.BigIntegerField(db_index=True) 
+    created_by_central_id = models.BigIntegerField(db_index=True)
+    is_pinned = models.BooleanField(default=False)
 
     class Meta(TimeStampedModel.Meta):
         db_table = "mom_meeting_notes"
         ordering = ["created_at"]
 
     def __str__(self):
-        return f"Note for {self.meeting.title}"
+        return f"Note for '{self.meeting.title}' by {self.created_by_central_id}"
 
 
 class GeneralNote(TimeStampedModel):
-    """ Standalone note — not tied to any meeting."""
+    """A personal note that is not tied to any specific meeting."""
 
     owner_central_id = models.BigIntegerField(db_index=True)
     title = models.CharField(max_length=255)
     description = models.TextField()
+    is_pinned = models.BooleanField(default=False)
 
     class Meta(TimeStampedModel.Meta):
         db_table = "mom_general_notes"
         indexes = [
             models.Index(
-                fields=["owner_central_id", "-created_at"], name="idx_note_owner"
+                fields=["owner_central_id", "created_at"],
+                name="idx_note_owner",
             ),
         ]
 
     def __str__(self):
-        return f"{self.title} by {self.owner_central_id}"
-
+        return f"{self.title} (owner={self.owner_central_id})"
