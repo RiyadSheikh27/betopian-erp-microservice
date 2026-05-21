@@ -4,13 +4,14 @@ from .models import EbookTitle, Ebook
 
 @admin.register(EbookTitle)
 class EbookTitleAdmin(admin.ModelAdmin):
-    list_display = ("id", "ebook_title", "created_at")
-    search_fields = ("ebook_title",)
-    ordering = ("ebook_title",)
+    list_display = ("id", "category_title", "created_at")
+    search_fields = ("category_title",)
+    ordering = ("category_title",)
 
 
 class EbookInline(admin.TabularInline):
     """Show ebooks inline when editing a title."""
+
     model = Ebook
     extra = 1
     fields = ("file", "created_at")
@@ -19,10 +20,10 @@ class EbookInline(admin.TabularInline):
 
 @admin.register(Ebook)
 class EbookAdmin(admin.ModelAdmin):
-    list_display = ("id", "title", "file", "created_at")
-    list_filter = ("title",)
-    search_fields = ("title__ebook_title",)
-    autocomplete_fields = ("title",)
+    list_display = ("id", "category", "file_name", "created_at")
+    list_filter = ("category",)
+    search_fields = ("category__category_title",)
+    autocomplete_fields = ("category",)
     ordering = ("-created_at",)
 
 

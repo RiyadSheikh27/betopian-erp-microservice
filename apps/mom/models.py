@@ -57,7 +57,7 @@ class MeetingParticipant(TimeStampedModel):
     # The primary key used by the central ERP / employee-directory service.
     central_id = models.BigIntegerField(db_index=True)
 
-    # --- Cached profile fields (populated from employee-directory API) ---
+    # Cached profile fields (populated from employee-directory API) ---
     employee_id = models.CharField(max_length=50, blank=True)
     username = models.CharField(max_length=255, blank=True)
     avatar_url = models.URLField(max_length=10_000, blank=True)

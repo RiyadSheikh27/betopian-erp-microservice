@@ -17,6 +17,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "phone",
             "department",
             "position",
+            "location",
+            "company",
             "avatar_url",
         )
         read_only_fields = fields

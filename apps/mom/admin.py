@@ -3,6 +3,7 @@ from .models import Meeting, MeetingParticipant, AgendaItem, MeetingNote, Genera
 
 """ Admin configuration for Meeting and Notes (MoM) microservice. """
 
+
 class MeetingParticipantInline(admin.TabularInline):
     model = MeetingParticipant
     extra = 0

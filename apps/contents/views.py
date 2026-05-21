@@ -7,7 +7,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django.db.models import Count, F, Prefetch, Exists, OuterRef
 
 from apps.utils.response import APIResponse
-from .models import Post, PostMedia, Reel
+from .models import Post, PostMedia, Reel, Community, CommunityMember
 from .serializers import (
     PostSerializer,
     PostCreateSerializer,
@@ -70,8 +70,7 @@ def _post_queryset(user=None):
     from apps.interactions.models import Like
 
     qs = (
-        Post.objects
-        .select_related("author")
+        Post.objects.select_related("author", "community")
         .prefetch_related(Prefetch("media", queryset=_annotated_media_qs(user)))
         .annotate(
             media_count=Count("media", distinct=True),
@@ -94,13 +93,13 @@ def _post_queryset(user=None):
         )
     return qs
 
+
 def _reel_queryset(user=None):
     from django.contrib.contenttypes.models import ContentType
     from apps.interactions.models import Like
 
     qs = (
-        Reel.objects
-        .select_related("author")
+        Reel.objects.select_related("author")
         .annotate(
             like_count=Count("likes", distinct=True),
             comment_count=Count("comments", distinct=True),
@@ -120,6 +119,7 @@ def _reel_queryset(user=None):
             )
         )
     return qs
+
 
 def _parse_page_size(request, default=10):
     try:
@@ -149,6 +149,28 @@ def _annotated_media_qs(user=None):
             )
         )
     return qs
+
+
+def _get_community(community_id, user):
+    """
+    Validate community_id passed as ?community=<uuid> query param.
+
+    Rules:
+      - If no community_id given - returns (None, None), post is a regular post
+      - Community must exist and be active
+      - User must be a member of that community to post in it
+
+    Returns (Community instance | None, error message | None).
+    """
+    if not community_id:
+        return None, None
+    try:
+        community = Community.objects.get(pk=community_id, is_active=True)
+    except Community.DoesNotExist:
+        return None, "Community not found."
+    if not CommunityMember.objects.filter(community=community, user=user).exists():
+        return None, "You are not a member of this community."
+    return community, None
 
 
 """ POST SECTION VIEWS"""
@@ -192,6 +214,13 @@ class PostListCreateView(APIView):
 
     def post(self, request):
         """Upload a new post with multiple media files."""
+
+        community_id = request.query_params.get("community")
+        community, error = _get_community(community_id, request.user)
+        if error:
+            return APIResponse.error(
+                message=error, status_code=400 if "not found" in error else 403
+            )
         files = request.FILES.getlist("files")
         captions = request.data.getlist("captions")
         data = {
@@ -201,6 +230,7 @@ class PostListCreateView(APIView):
             "captions": captions,
         }
         serializer = PostCreateSerializer(data=data)
+
         if not serializer.is_valid():
             logger.warning(
                 "Post create failed | user_id=%s errors=%s",
@@ -211,12 +241,13 @@ class PostListCreateView(APIView):
                 errors=serializer.errors, message="Post creation failed."
             )
 
-        post = serializer.save(author=request.user)
+        post = serializer.save(author=request.user, community=community)
         logger.info(
-            "Post created | user_id=%s post_id=%s media=%s",
+            "Post created | user_id=%s post_id=%s media=%s community=%s",
             request.user.pk,
             post.pk,
             len(files),
+            community.name if community else None,
         )
 
         post = _post_queryset().get(pk=post.pk)
@@ -446,3 +477,18 @@ class ReelViewCountView(APIView):
             request.user.pk,
         )
         return APIResponse.success(message="View recorded.")
+
+""" COMMUNITY SECTION VIEWS """
+
+class CommunityListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        communities = Community.objects.filter(
+            members__user=request.user,
+            is_active=True
+        ).distinct()
+        from .serializers import CommunitySerializer
+        return APIResponse.success(
+            data=CommunitySerializer(communities, many=True, context={"request": request}).data
+        )

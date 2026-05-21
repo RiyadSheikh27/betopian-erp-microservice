@@ -48,6 +48,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     phone = models.CharField(max_length=20, blank=True)
     department = models.CharField(max_length=150, blank=True)
     position = models.CharField(max_length=150, blank=True)
+    location = models.CharField(max_length=150, blank=True)
+    company = models.CharField(max_length=150, blank=True)
     avatar_url = models.URLField(max_length=10000, blank=True, null=True)
 
     # Only set for Django admin superusers, never for central auth users
@@ -55,6 +57,9 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     # Stored for use by other ERP services within the same app
     central_access_token = models.TextField(blank=True)
+
+    # Community assigned section
+    community_assigned_at = models.DateTimeField(blank=True, null=True, default=None)
 
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)

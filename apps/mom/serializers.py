@@ -3,10 +3,7 @@ from rest_framework import serializers
 from .models import Meeting, MeetingParticipant, AgendaItem, MeetingNote, GeneralNote
 
 
-# ---------------------------------------------------------------------------
-# General Notes
-# ---------------------------------------------------------------------------
-
+""" General Notes """
 
 class GeneralNoteSerializer(serializers.ModelSerializer):
     class Meta:
@@ -15,10 +12,7 @@ class GeneralNoteSerializer(serializers.ModelSerializer):
         read_only_fields = ("id", "is_pinned", "created_at", "updated_at")
 
 
-# ---------------------------------------------------------------------------
-# Agenda Items
-# ---------------------------------------------------------------------------
-
+""" Agenda Items """
 
 class AgendaItemSerializer(serializers.ModelSerializer):
     class Meta:
@@ -39,9 +33,7 @@ class AgendaItemUpdateSerializer(serializers.ModelSerializer):
         fields = ("title", "is_done")
 
 
-# ---------------------------------------------------------------------------
-# Meeting Notes
-# ---------------------------------------------------------------------------
+""" Meeting Notes """
 
 
 class MeetingNoteSerializer(serializers.ModelSerializer):
@@ -51,10 +43,7 @@ class MeetingNoteSerializer(serializers.ModelSerializer):
         read_only_fields = ("id", "created_by_central_id", "is_pinned", "created_at")
 
 
-# ---------------------------------------------------------------------------
-# Participants (read-only, used inside meeting serializers)
-# ---------------------------------------------------------------------------
-
+""" Participants (read-only, used inside meeting serializers) """
 
 class ParticipantSerializer(serializers.Serializer):
     """
@@ -77,19 +66,9 @@ class ParticipantSerializer(serializers.Serializer):
     is_creator = serializers.BooleanField()
 
 
-# ---------------------------------------------------------------------------
-# Meetings – list
-# ---------------------------------------------------------------------------
-
-
+""" Meetings - list """
 class MeetingListSerializer(serializers.ModelSerializer):
-    """
-    Compact meeting representation used in list endpoints.
-
-    Context expected from the view:
-      - ``participant_profiles``: dict[str(meeting_id), dict[central_id, profile]]
-      - ``pinned_meeting_ids``:   set[UUID]
-    """
+    """ Compact meeting representation used in list endpoints. """
 
     participants = serializers.SerializerMethodField()
     total_people = serializers.SerializerMethodField()
@@ -115,18 +94,14 @@ class MeetingListSerializer(serializers.ModelSerializer):
             "created_at",
         )
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
+    """ Helpers """
 
     def _live_profile(self, meeting_id, central_id):
         """Return the live profile dict for one participant, or {}."""
         all_profiles = self.context.get("participant_profiles", {})
         return all_profiles.get(str(meeting_id), {}).get(central_id) or {}
 
-    # ------------------------------------------------------------------
-    # Field methods
-    # ------------------------------------------------------------------
+    """ Field methods"""
 
     def get_participants(self, obj):
         creator_id = obj.creator_central_id
@@ -183,11 +158,7 @@ class MeetingListSerializer(serializers.ModelSerializer):
         return obj.id in self.context.get("pinned_meeting_ids", set())
 
 
-# ---------------------------------------------------------------------------
-# Meetings – detail
-# ---------------------------------------------------------------------------
-
-
+""" Meetings - detail """
 class MeetingDetailSerializer(MeetingListSerializer):
     """
     Full meeting representation including agenda items, notes, and a
@@ -231,11 +202,7 @@ class MeetingDetailSerializer(MeetingListSerializer):
         }
 
 
-# ---------------------------------------------------------------------------
-# Meetings – write
-# ---------------------------------------------------------------------------
-
-
+""" Meetings - write """
 class MeetingWriteSerializer(serializers.ModelSerializer):
     """
     Shared base for create / update.  Subclasses implement ``save`` logic.
@@ -346,10 +313,7 @@ class MeetingUpdateSerializer(MeetingWriteSerializer):
         return token, session_id
 
 
-# ---------------------------------------------------------------------------
-# Notes Tab (unified view)
-# ---------------------------------------------------------------------------
-
+""" Notes Tab (unified view) """
 
 class NotesTabSerializer(serializers.Serializer):
     id = serializers.UUIDField()

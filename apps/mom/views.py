@@ -31,9 +31,7 @@ from .serializers import (
 logger = logging.getLogger("apps.mom")
 
 
-# ---------------------------------------------------------------------------
-# Utility helpers
-# ---------------------------------------------------------------------------
+""" Utility helpers """
 
 
 def _central_id(request):
@@ -131,15 +129,13 @@ def _build_meeting_context(request, meetings):
     }
 
 
-# ---------------------------------------------------------------------------
-# General Notes
-# ---------------------------------------------------------------------------
+""" General Notes """
 
 
 class GeneralNoteListCreateView(APIView):
     """
-    GET  /notes/    – list all personal notes for the authenticated user.
-    POST /notes/    – create a new personal note.
+    List all personal notes for the authenticated user.
+    Create a new personal note.
     """
 
     permission_classes = [IsAuthenticated]
@@ -172,9 +168,9 @@ class GeneralNoteListCreateView(APIView):
 
 class GeneralNoteDetailView(APIView):
     """
-    GET    /notes/<pk>/  – retrieve a personal note.
-    PATCH  /notes/<pk>/  – partial update.
-    DELETE /notes/<pk>/  – delete.
+    Retrieve a personal note.
+    Partial update.
+    Delete.
     """
 
     permission_classes = [IsAuthenticated]
@@ -210,7 +206,7 @@ class GeneralNoteDetailView(APIView):
 
 
 class GeneralNotePinToggleView(APIView):
-    """POST /notes/<pk>/pin/ – toggle the pinned state of a personal note."""
+    """Toggle the pinned state of a personal note."""
 
     permission_classes = [IsAuthenticated]
 
@@ -228,19 +224,13 @@ class GeneralNotePinToggleView(APIView):
         )
 
 
-# ---------------------------------------------------------------------------
-# Meetings
-# ---------------------------------------------------------------------------
+""" Meetings """
 
 
 class MeetingListCreateView(APIView):
     """
-    GET  /meetings/  – list meetings the authenticated user participates in.
-    POST /meetings/  – create a new meeting.
-
-    Query params (GET):
-      search         – filter by title or location.
-      participant_id – filter by a specific participant's central_id.
+    list meetings the authenticated user participates in.
+    Create a new meeting.
     """
 
     permission_classes = [IsAuthenticated]
@@ -311,9 +301,9 @@ class MeetingListCreateView(APIView):
 
 class MeetingDetailView(APIView):
     """
-    GET    /meetings/<pk>/  – full meeting detail (participants only).
-    PATCH  /meetings/<pk>/  – update meeting (creator only).
-    DELETE /meetings/<pk>/  – creator deletes; participant leaves.
+    Full meeting detail (participants only).
+    Update meeting (creator only).
+    Creator deletes; participant leaves.
     """
 
     permission_classes = [IsAuthenticated]
@@ -405,7 +395,7 @@ class MeetingDetailView(APIView):
 
 
 class MeetingPinToggleView(APIView):
-    """POST /meetings/<pk>/pin/ – toggle the pinned state of a meeting."""
+    """Toggle the pinned state of a meeting."""
 
     permission_classes = [IsAuthenticated]
 
@@ -429,13 +419,11 @@ class MeetingPinToggleView(APIView):
         )
 
 
-# ---------------------------------------------------------------------------
-# Agenda Items
-# ---------------------------------------------------------------------------
+""" Agenda Items """
 
 
 class AgendaItemCreateView(APIView):
-    """POST /meetings/<pk>/agenda/ – add an agenda item (creator only)."""
+    """Add an agenda item (creator only)."""
 
     permission_classes = [IsAuthenticated]
 
@@ -463,8 +451,8 @@ class AgendaItemCreateView(APIView):
 
 class AgendaItemDetailView(APIView):
     """
-    PATCH  /meetings/<pk>/agenda/<item_id>/  – update an agenda item (creator only).
-    DELETE /meetings/<pk>/agenda/<item_id>/  – delete an agenda item (creator only).
+    Update an agenda item (creator only).
+    Delete an agenda item (creator only).
     """
 
     permission_classes = [IsAuthenticated]
@@ -499,9 +487,7 @@ class AgendaItemDetailView(APIView):
         return APIResponse.success(message="Agenda item deleted.")
 
 
-# ---------------------------------------------------------------------------
-# Meeting Notes
-# ---------------------------------------------------------------------------
+""" Meeting Notes """
 
 
 class MeetingNoteCreateView(APIView):
@@ -530,8 +516,8 @@ class MeetingNoteCreateView(APIView):
 
 class MeetingNoteDetailView(APIView):
     """
-    PATCH  /meetings/<pk>/notes/<note_id>/  – update own note.
-    DELETE /meetings/<pk>/notes/<note_id>/  – delete own note.
+    PATCH  /meetings/<pk>/notes/<note_id>/ - update own note.
+    DELETE /meetings/<pk>/notes/<note_id>/ - delete own note.
     """
 
     permission_classes = [IsAuthenticated]
@@ -587,19 +573,10 @@ class MeetingNotePinToggleView(APIView):
         )
 
 
-# ---------------------------------------------------------------------------
-# Notes Tab (unified general + meeting notes)
-# ---------------------------------------------------------------------------
-
-
 class NotesTabView(APIView):
     """
-    GET /notes-tab/  – unified list of all notes (general + meeting) for the
+    Unified list of all notes (general + meeting) for the
     authenticated user, sorted pinned-first then oldest-first.
-
-    Query params:
-      search – filter by title / description for general notes, and by
-               description / meeting title for meeting notes.
     """
 
     permission_classes = [IsAuthenticated]
@@ -654,20 +631,14 @@ class NotesTabView(APIView):
         return APIResponse.success(data=NotesTabSerializer(unified, many=True).data)
 
 
-# ---------------------------------------------------------------------------
-# Meeting Participants
-# ---------------------------------------------------------------------------
+""" Meeting Participants """
 
 
 class MeetingParticipantView(APIView):
     """
-    POST   /meetings/<pk>/participants/                  – add participants (creator only).
-    DELETE /meetings/<pk>/participants/<int:central_id>/ – remove a participant (creator only).
-
-    Rules:
-      - The creator cannot remove themselves.
-      - Adding an already-existing participant is a no-op (not an error).
-      - Profiles are fetched from the central API and cached on create.
+    - The creator cannot remove themselves.
+    - Adding an already-existing participant is a no-op (not an error).
+    - Profiles are fetched from the central API and cached on create.
     """
 
     permission_classes = [IsAuthenticated]

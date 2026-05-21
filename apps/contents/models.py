@@ -3,7 +3,67 @@ from django.db import models
 from apps.utils.models import TimeStampedModel
 from django.contrib.contenttypes.fields import GenericRelation
 
-""" Post Manage Section """
+
+""" Community Section """
+
+class Community(TimeStampedModel):
+    """Community model for group posting and interactions."""
+
+    class CommunityType(models.TextChoices):
+        LOCATION = "location", "Location"
+        COMPANY = "company", "Company"
+        DEPARTMENT = "department", "Department"
+
+    name = models.CharField(max_length=150)
+    description = models.TextField(blank=True)
+    cover_image = models.ImageField(
+        upload_to="community_covers/", blank=True, null=True
+    )
+    type = models.CharField(max_length=20, choices=CommunityType.choices)
+    keywords = models.JSONField(default=list, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta(TimeStampedModel.Meta):
+        db_table = "communities"
+        indexes = [
+            models.Index(fields=["type"], name="idx_community_type"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.type})"
+
+
+class CommunityMember(TimeStampedModel):
+    """Membership model linking users to communities with roles."""
+
+    community = models.ForeignKey(
+        Community, on_delete=models.CASCADE, related_name="members"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="community_memberships",
+    )
+    role = models.CharField(max_length=50, default="member")
+
+    class Meta(TimeStampedModel.Meta):
+        db_table = "community_members"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["community", "user"], name="unique_community_member"
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["user", "created_at"], name="idx_community_member_user"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} in {self.community.name} as {self.role}"
+
+
+""" Content Manage Section """
 
 
 class Post(TimeStampedModel):
@@ -18,6 +78,9 @@ class Post(TimeStampedModel):
         on_delete=models.CASCADE,
         related_name="posts",
     )
+    community = models.ForeignKey(
+        Community, on_delete=models.CASCADE, related_name="posts", blank=True, null=True
+    )
     caption = models.TextField(blank=True)
     privacy = models.CharField(
         max_length=10,
@@ -31,9 +94,12 @@ class Post(TimeStampedModel):
     class Meta(TimeStampedModel.Meta):
         db_table = "posts"
         indexes = [
-            # filter by author - order by created_at + id in one scan.
             models.Index(
                 fields=["author", "-created_at", "-id"], name="idx_post_author_created"
+            ),
+            models.Index(fields=["-created_at", "-id"], name="idx_post_created"),
+            models.Index(
+                fields=["community", "-created_at"], name="idx_post_community"
             ),
         ]
 
@@ -60,6 +126,12 @@ class PostMedia(TimeStampedModel):
     class Meta(TimeStampedModel.Meta):
         db_table = "Post_media"
         ordering = ["order"]
+        indexes  = [
+            models.Index(
+                fields=["media_type", "-created_at"],
+                name="idx_postmedia_type_created",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.media_type} for post {self.post.id}"

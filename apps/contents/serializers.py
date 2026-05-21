@@ -3,10 +3,12 @@ import mimetypes
 from django.db import models
 from rest_framework import serializers
 
-from .models import Post, PostMedia, Reel
+from .models import Post, PostMedia, Reel, Community, CommunityMember
 
 IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
 VIDEO_TYPES = {"video/mp4", "video/quicktime", "video/x-msvideo", "video/webm"}
+
+""" Helper Function """
 
 
 def _resolve_media_type(file):
@@ -21,6 +23,9 @@ def _resolve_media_type(file):
     return None, mime
 
 
+""" Content Author Serializer """
+
+
 class PostAuthorSerializer(serializers.Serializer):
     """Author's basic information — mirrors central ERP user fields."""
 
@@ -31,6 +36,27 @@ class PostAuthorSerializer(serializers.Serializer):
     department = serializers.CharField()
     position = serializers.CharField()
     avatar_url = serializers.URLField()
+
+
+""" Community Serializer """
+
+
+class CommunitySerializer(serializers.ModelSerializer):
+    cover_image = serializers.SerializerMethodField()
+
+    class Meta:
+        
+        model = Community
+        fields = ("id", "name", "description", "cover_image", "type")
+
+    def get_cover_image(self, obj):
+        request = self.context.get("request")
+        if obj.cover_image and request:
+            return request.build_absolute_uri(obj.cover_image.url)
+        return None
+
+
+""" Content Serializers """
 
 
 class PostMediaSerializer(serializers.ModelSerializer):
@@ -61,17 +87,19 @@ class PostMediaSerializer(serializers.ModelSerializer):
 
 class PostSerializer(serializers.ModelSerializer):
     author = PostAuthorSerializer(read_only=True)
+    community = CommunitySerializer(read_only=True)
     media = PostMediaSerializer(many=True, read_only=True)
     media_count = serializers.IntegerField(read_only=True)
     like_count = serializers.IntegerField(read_only=True, default=0)
     comment_count = serializers.IntegerField(read_only=True, default=0)
-    is_liked = serializers.BooleanField(read_only=True, default=False)  # ADD
+    is_liked = serializers.BooleanField(read_only=True, default=False)
 
     class Meta:
         model = Post
         fields = (
             "id",
             "author",
+            "community",
             "caption",
             "privacy",
             "is_edited",
@@ -79,7 +107,40 @@ class PostSerializer(serializers.ModelSerializer):
             "media_count",
             "like_count",
             "comment_count",
-            "is_liked",  # ADD
+            "is_liked",
+            "created_at",
+            "updated_at",
+        )
+
+
+class PostDetailSerializer(serializers.ModelSerializer):
+    """
+    Post detail serializer.
+    Includes per-media like_count and comment_count (annotated in view).
+    """
+
+    author = PostAuthorSerializer(read_only=True)
+    community = CommunitySerializer(read_only=True)  # NEW
+    media = PostMediaSerializer(many=True, read_only=True)
+    media_count = serializers.IntegerField(read_only=True)
+    like_count = serializers.IntegerField(read_only=True, default=0)
+    comment_count = serializers.IntegerField(read_only=True, default=0)
+    is_liked = serializers.BooleanField(read_only=True, default=False)
+
+    class Meta:
+        model = Post
+        fields = (
+            "id",
+            "author",
+            "community",
+            "caption",
+            "privacy",
+            "is_edited",
+            "media",
+            "media_count",
+            "like_count",
+            "comment_count",
+            "is_liked",
             "created_at",
             "updated_at",
         )
@@ -237,7 +298,7 @@ class ReelSerializer(serializers.ModelSerializer):
     video_url = serializers.SerializerMethodField()
     like_count = serializers.IntegerField(read_only=True, default=0)
     comment_count = serializers.IntegerField(read_only=True, default=0)
-    is_liked = serializers.BooleanField(read_only=True, default=False)  
+    is_liked = serializers.BooleanField(read_only=True, default=False)
 
     class Meta:
         model = Reel
@@ -250,7 +311,7 @@ class ReelSerializer(serializers.ModelSerializer):
             "view_count",
             "like_count",
             "comment_count",
-            "is_liked",  
+            "is_liked",
             "is_edited",
             "created_at",
             "updated_at",

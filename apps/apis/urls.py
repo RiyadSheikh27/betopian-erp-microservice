@@ -6,8 +6,9 @@ from apps.contents.views import (
     ReelListCreateView,
     ReelDetailView,
     ReelViewCountView,
+    CommunityListView,
 )
-from apps.feed.views import PostNewsFeedView, ReelNewsFeedView
+from apps.feed.views import CommunityPostFeedView, PostNewsFeedView, ReelNewsFeedView
 from apps.interactions.views import (
     LikeToggleView, 
     LikerListView, 
@@ -43,12 +44,14 @@ contents_urlpatterns = [
     path("reels/", ReelListCreateView.as_view(), name="reel-list-create"),
     path("reels/<uuid:pk>/", ReelDetailView.as_view(), name="reel-detail"),
     path("reels/<uuid:pk>/view/", ReelViewCountView.as_view(), name="reel-view-count"),
+    path("communities/", CommunityListView.as_view(), name="community-list"),
 ]
 
 feed_urlpatterns = [
     # News feed
     path("feed/posts/", PostNewsFeedView.as_view(), name="feed-posts"),
     path("feed/reels/", ReelNewsFeedView.as_view(), name="feed-reels"),
+    path("feed/community/<uuid:community_id>/", CommunityPostFeedView.as_view(), name="feed-community-posts"), 
 ]
 
 interactions_urlpatterns = [

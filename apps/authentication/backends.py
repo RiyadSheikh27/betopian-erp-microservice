@@ -26,7 +26,11 @@ class CentralTokenAuthentication(BaseAuthentication):
 
         session_id = request.COOKIES.get("session_id", "")
         profile = self._fetch_profile(token, session_id)
+
+        # logger.info("Profile Response: %s", profile)
+
         user = self._sync_user(profile, token)
+        # Community auto-assignment.
         return (user, token)
 
     def _fetch_profile(self, token, session_id):
@@ -48,16 +52,20 @@ class CentralTokenAuthentication(BaseAuthentication):
         if resp.status_code == 403:
             raise AuthenticationFailed("Session invalid. Please login again.")
         if resp.status_code == 500:
-            raise AuthenticationFailed("Central auth service is temporarily unavailable.")
+            raise AuthenticationFailed(
+                "Central auth service is temporarily unavailable."
+            )
         if resp.status_code != 200:
-            logger.error("Central profile returned %s | body=%s", resp.status_code, resp.text)
+            logger.error(
+                "Central profile returned %s | body=%s", resp.status_code, resp.text
+            )
             raise AuthenticationFailed("Central auth service error.")
 
         return resp.json()
 
     def _sync_user(self, profile, token):
         employee_id = profile["employee_id"]
-
+    
         incoming = {
             "central_id": profile["id"],
             "email": profile["email"],
@@ -66,33 +74,46 @@ class CentralTokenAuthentication(BaseAuthentication):
             "phone": profile.get("phone", ""),
             "department": profile.get("department", ""),
             "position": profile.get("position", ""),
+            "location": profile.get("address", ""),
+            "company": profile.get("company", "") or profile.get("company_name", ""),
             "avatar_url": profile.get("avatar_url", ""),
         }
-
+    
         try:
             user = User.objects.get(employee_id=employee_id)
             changed = {k: v for k, v in incoming.items() if getattr(user, k) != v}
             changed["central_access_token"] = token
-
-            if len(changed) > 1:
+    
+            if changed:
                 for k, v in changed.items():
                     setattr(user, k, v)
                 user.save(update_fields=list(changed.keys()) + ["updated_at"])
                 logger.info("User synced | user_id=%s fields=%s", user.pk, list(changed.keys()))
             else:
                 User.objects.filter(pk=user.pk).update(central_access_token=token)
-
+    
         except User.DoesNotExist:
-            user = User.objects.create(
-                employee_id=employee_id,
-                central_access_token=token,
-                is_active=True,
-                **incoming,
+            user, created = User.objects.update_or_create(
+                central_id=incoming["central_id"],
+                defaults={
+                    "employee_id": employee_id,
+                    "central_access_token": token,
+                    "is_active": True,
+                    **incoming,
+                },
             )
-            logger.info("New user created | user_id=%s email=%s", user.pk, user.email)
-
-        return user
-
+            if created:
+                logger.info("New user created | user_id=%s email=%s", user.pk, user.email)
+            else:
+                logger.info("User re-linked by central_id | user_id=%s email=%s", user.pk, user.email)
+    
+        try:
+            from apps.contents.community import assign_communities
+            assign_communities(user, profile)
+        except Exception as e:
+            logger.error("Community assignment failed | user_id=%s error=%s", user.pk, e)
+    
+        return user  # ← this was missing
 
 def fetch_central_profile(central_id, token, session_id):
     """
@@ -153,7 +174,9 @@ def fetch_central_profiles_bulk(central_ids, token, session_id):
             try:
                 results[cid] = future.result()
             except Exception as e:
-                logger.error("Bulk profile fetch error | central_id=%s error=%s", cid, e)
+                logger.error(
+                    "Bulk profile fetch error | central_id=%s error=%s", cid, e
+                )
                 results[cid] = None
 
     logger.info(

@@ -15,6 +15,8 @@ class UserAdmin(BaseUserAdmin):
         "name",
         "department",
         "position",
+        "location",
+        "company",
         "is_staff",
         "is_active",
         "created_at",
@@ -26,6 +28,8 @@ class UserAdmin(BaseUserAdmin):
         "is_superuser",
         "department",
         "position",
+        "location",
+        "company",
         "created_at",
     )
 
@@ -56,16 +60,11 @@ class UserAdmin(BaseUserAdmin):
                     "email",
                     "name",
                     "phone",
-                    "avatar_url",
-                )
-            },
-        ),
-        (
-            "Organization",
-            {
-                "fields": (
+                    "location",
+                    "company",
                     "department",
                     "position",
+                    "avatar_url",
                 )
             },
         ),
@@ -110,6 +109,3 @@ class UserAdmin(BaseUserAdmin):
 
     def has_add_permission(self, request):
         return False
-
-    # def has_delete_permission(self, request, obj=None):
-    #     return False

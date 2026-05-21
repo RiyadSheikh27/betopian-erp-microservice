@@ -5,17 +5,17 @@ from .models import EbookTitle, Ebook
 class EbookTitleSerializer(serializers.ModelSerializer):
     class Meta:
         model = EbookTitle
-        fields = ("id", "ebook_title", "created_at")
+        fields = ("id", "category_title", "created_at")
         read_only_fields = ("id", "created_at")
 
 
 class EbookSerializer(serializers.ModelSerializer):
-    title = EbookTitleSerializer(read_only=True)
+    category = EbookTitleSerializer(read_only=True)
     url = serializers.SerializerMethodField()
 
     class Meta:
         model = Ebook
-        fields = ("id", "title", "url", "created_at")
+        fields = ("id", "category", "file_name", "url", "created_at")
         read_only_fields = ("id", "created_at")
 
     def get_url(self, obj):
