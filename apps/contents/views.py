@@ -478,17 +478,23 @@ class ReelViewCountView(APIView):
         )
         return APIResponse.success(message="View recorded.")
 
+
 """ COMMUNITY SECTION VIEWS """
+
 
 class CommunityListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        communities = Community.objects.filter(
-            members__user=request.user,
-            is_active=True
-        ).distinct()
+        communities = (
+            Community.objects.filter(members__user=request.user, is_active=True)
+            .annotate(member_count=Count("members"))
+            .distinct()
+        )
         from .serializers import CommunitySerializer
+
         return APIResponse.success(
-            data=CommunitySerializer(communities, many=True, context={"request": request}).data
+            data=CommunitySerializer(
+                communities, many=True, context={"request": request}
+            ).data
         )

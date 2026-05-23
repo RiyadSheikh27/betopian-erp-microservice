@@ -43,11 +43,12 @@ class PostAuthorSerializer(serializers.Serializer):
 
 class CommunitySerializer(serializers.ModelSerializer):
     cover_image = serializers.SerializerMethodField()
+    member_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         
         model = Community
-        fields = ("id", "name", "description", "cover_image", "type")
+        fields = ("id", "name", "description", "cover_image", "member_count", "type")
 
     def get_cover_image(self, obj):
         request = self.context.get("request")
