@@ -10,6 +10,8 @@ class EbookTitle(TimeStampedModel):
 
     class Meta(TimeStampedModel.Meta):
         ordering = ["created_at"]
+        verbose_name = "Ebook Category"
+        verbose_name_plural = "Ebook Categories"
 
     def __str__(self):
         return self.category_title
