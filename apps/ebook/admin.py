@@ -4,7 +4,7 @@ from .models import EbookTitle, Ebook
 
 @admin.register(EbookTitle)
 class EbookTitleAdmin(admin.ModelAdmin):
-    list_display = ("id", "category_title", "created_at")
+    list_display = ("id", "category_title", "category_image", "created_at")
     search_fields = ("category_title",)
     ordering = ("category_title",)
 

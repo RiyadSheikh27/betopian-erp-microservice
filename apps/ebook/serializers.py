@@ -5,7 +5,7 @@ from .models import EbookTitle, Ebook
 class EbookTitleSerializer(serializers.ModelSerializer):
     class Meta:
         model = EbookTitle
-        fields = ("id", "category_title", "created_at")
+        fields = ("id", "category_title", "category_image", "created_at")
         read_only_fields = ("id", "created_at")
 
 

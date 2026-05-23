@@ -12,7 +12,6 @@ logger = logging.getLogger("apps.ebook")
 
 class EbookTitleListView(APIView):
     """
-    GET /ebook-titles/  - list all ebook titles.
     Query params: search - filter by category_title (partial, case-insensitive).
     """
 
@@ -30,9 +29,9 @@ class EbookTitleListView(APIView):
 
 class EbookListView(APIView):
     """
-    GET /ebooks/  - list all ebooks.
+    GET /ebooks/ - list all ebooks.
     Query params:
-      search   - filter by category name (partial, case-insensitive).
+      search - filter by category name (partial, case-insensitive).
       category_id - filter by exact EbookTitle id.
     """
 
