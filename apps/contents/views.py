@@ -6,6 +6,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.db.models import Count, F, Prefetch, Exists, OuterRef
 
+from apps.utils.throttles import UploadThrottle, FeedThrottle
+
 from apps.utils.response import APIResponse
 from .models import Post, PostMedia, Reel, Community, CommunityMember
 from .serializers import (
@@ -181,6 +183,7 @@ class PostListCreateView(APIView):
 
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
+    throttle_classes = [UploadThrottle]
 
     def get(self, request):
         """Own post list - cursor paginated."""

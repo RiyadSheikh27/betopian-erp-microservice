@@ -1,6 +1,7 @@
 import uuid
 from django.db import models
 from django.conf import settings
+from django.db import models
 
 """ Abstract base for every model in the project."""
 
@@ -34,3 +35,15 @@ class ProfileImageStore(TimeStampedModel):
 
     def __str__(self):
         return f"Profile Image for {self.user.username} at {self.created_at}"
+
+"""Dynamic Media Handling"""
+
+class MediaHandling(models.Model):
+    image_upload_max_size_mb = models.IntegerField(default=10)
+    video_upload_max_size_mb = models.IntegerField(default=200)
+    image_compression_quality = models.IntegerField(default=85)
+    image_max_dimension = models.IntegerField(default=1920)
+    avatar_max_dimension = models.IntegerField(default=400)
+
+    def __str__(self):
+        return "Media Handling Configuration"

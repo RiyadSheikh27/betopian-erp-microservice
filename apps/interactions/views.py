@@ -5,6 +5,8 @@ from django.contrib.contenttypes.models import ContentType
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
+from apps.utils.throttles import InteractionThrottle
+
 from apps.utils.response import APIResponse
 from apps.contents.models import Post, PostMedia, Reel
 from .models import Like, Comment
@@ -82,6 +84,7 @@ def _build_comment_tree(comments):
 
 class LikeToggleView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes = [InteractionThrottle]
 
     def post(self, request, target_type, pk):
         content_type, model = _get_content_type(target_type)
@@ -191,6 +194,7 @@ class CommentListCreateView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [InteractionThrottle]
 
     def get(self, request, target_type, pk):
         content_type, model = _get_content_type(target_type)

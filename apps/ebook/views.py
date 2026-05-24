@@ -24,7 +24,9 @@ class EbookTitleListView(APIView):
         if search:
             qs = qs.filter(category_title__icontains=search)
 
-        return APIResponse.success(data=EbookTitleSerializer(qs, many=True).data)
+        return APIResponse.success(
+            data=EbookTitleSerializer(qs, many=True, context={"request": request}).data
+        )
 
 
 class EbookListView(APIView):

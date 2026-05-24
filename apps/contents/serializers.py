@@ -3,6 +3,7 @@ import mimetypes
 from django.db import models
 from rest_framework import serializers
 
+from apps.utils.media import validate_file_size, compress_image
 from .models import Post, PostMedia, Reel, Community, CommunityMember
 
 IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
@@ -46,7 +47,7 @@ class CommunitySerializer(serializers.ModelSerializer):
     member_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
-        
+
         model = Community
         fields = ("id", "name", "description", "cover_image", "member_count", "type")
 
@@ -168,6 +169,10 @@ class PostCreateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     f"'{file.name}' has unsupported type '{mime}'."
                 )
+            try:
+                validate_file_size(file, media_type)
+            except ValueError as e:
+                raise serializers.ValidationError(str(e))
         return files
 
     def create(self, validated_data):
@@ -176,6 +181,13 @@ class PostCreateSerializer(serializers.ModelSerializer):
         captions = validated_data.pop("captions", [])
         post = Post.objects.create(**validated_data)
         if files:
+            processed_files = []
+            for file in files:
+                media_type, _ = _resolve_media_type(file)
+                # Compress images — pass videos through unchanged
+                if media_type == PostMedia.MediaType.IMAGE:
+                    file = compress_image(file)
+                processed_files.append(file)
             PostMedia.objects.bulk_create(
                 [
                     PostMedia(
@@ -276,6 +288,14 @@ class PostUpdateSerializer(serializers.ModelSerializer):
                 instance.media.aggregate(max_order=models.Max("order"))["max_order"]
                 or -1
             )
+
+            processed = []
+            for file in add_files:
+                media_type, _ = _resolve_media_type(file)
+                if media_type == PostMedia.MediaType.IMAGE:
+                    file = compress_image(file)
+                processed.append(file)
+
             PostMedia.objects.bulk_create(
                 [
                     PostMedia(
@@ -338,6 +358,10 @@ class ReelCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 f"'{file.name}' is not a supported video type."
             )
+        try:
+            validate_file_size(file, "video")
+        except ValueError as e:
+            raise serializers.ValidationError(str(e))
         return file
 
 

@@ -3,6 +3,8 @@ import logging
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
+from apps.utils.throttles import AuthThrottle
+
 from apps.utils.response import APIResponse
 from .serializers import UserProfileSerializer
 
@@ -26,6 +28,7 @@ class LogoutView(APIView):
     """We don't issue or store session tokens - central ERP does."""
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [AuthThrottle]
 
     def post(self, request):
         logger.info(

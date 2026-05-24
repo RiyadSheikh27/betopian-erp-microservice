@@ -8,11 +8,10 @@ class EbookTitleSerializer(serializers.ModelSerializer):
     class Meta:
         model = EbookTitle
         fields = ("id", "category_title", "category_image", "created_at")
-        read_only_fields = ("id", "created_at")
 
     def get_category_image(self, obj):
         request = self.context.get("request")
-        if obj.category_image and request:
+        if obj.category_image:
             return request.build_absolute_uri(obj.category_image.url)
         return None
 

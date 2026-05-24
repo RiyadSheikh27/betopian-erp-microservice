@@ -152,21 +152,46 @@ REST_FRAMEWORK = {
         "rest_framework.parsers.MultiPartParser",
         "rest_framework.parsers.FormParser",
     ),
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": config("THROTTLE_ANON", default="60/minute"),
+        "user": config("THROTTLE_USER", default="300/minute"),
+        "auth": config("THROTTLE_AUTH", default="10/minute"),  # login/logout
+        "upload": config("THROTTLE_UPLOAD", default="30/minute"),  # post/reel create
+        "feed": config("THROTTLE_FEED", default="120/minute"),  # feed reads
+        "interactions": config(
+            "THROTTLE_INTERACTIONS", default="60/minute"
+        ),  # like/comment
+    },
 }
-
-# SIMPLE_JWT = {
-#     "ACCESS_TOKEN_LIFETIME": timedelta(hours=24),
-#     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
-#     "ROTATE_REFRESH_TOKENS": True,
-#     "BLACKLIST_AFTER_ROTATION": True,
-#     "AUTH_HEADER_TYPES": ("Bearer",),
-# }
 
 """ Max file size - 50 MB """
 
-DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800
-FILE_UPLOAD_MAX_MEMORY_SIZE = 52428800
+IMAGE_UPLOAD_MAX_SIZE_MB = config("IMAGE_UPLOAD_MAX_SIZE_MB", default=10, cast=int)
+VIDEO_UPLOAD_MAX_SIZE_MB = config("VIDEO_UPLOAD_MAX_SIZE_MB", default=200, cast=int)
 
+IMAGE_UPLOAD_MAX_SIZE = IMAGE_UPLOAD_MAX_SIZE_MB * 1024 * 1024
+VIDEO_UPLOAD_MAX_SIZE = VIDEO_UPLOAD_MAX_SIZE_MB * 1024 * 1024
+
+# Global Settings
+DATA_UPLOAD_MAX_MEMORY_SIZE = VIDEO_UPLOAD_MAX_SIZE
+FILE_UPLOAD_MAX_MEMORY_SIZE = VIDEO_UPLOAD_MAX_SIZE
+
+""" Image Compression - Pillow settings """
+
+IMAGE_COMPRESSION_QUALITY = config("IMAGE_COMPRESSION_QUALITY", default=85, cast=int)
+IMAGE_MAX_DIMENSION = config("IMAGE_MAX_DIMENSION", default=1920, cast=int)  # max width or height px
+AVATAR_MAX_DIMENSION = config("AVATAR_MAX_DIMENSION", default=400,  cast=int)
+
+""" Gunicorn — recommended settings for production (used in gunicorn.conf.py) """
+
+GUNICORN_WORKERS = config("GUNICORN_WORKERS", default=4, cast=int)  # CPU cores * 2 + 1
+GUNICORN_THREADS = config("GUNICORN_THREADS", default=2, cast=int)
+GUNICORN_TIMEOUT = config("GUNICORN_TIMEOUT", default=120, cast=int)
+GUNICORN_KEEPALIVE = config("GUNICORN_KEEPALIVE", default=5, cast=int)
 
 """ Logging - structured console output, descriptive for terminal debugging """
 
@@ -192,7 +217,6 @@ LOGGING = {
         },
     },
     "loggers": {
-        # App-level loggers
         "apps.authentication": {
             "handlers": ["console"],
             "level": "DEBUG",
@@ -203,7 +227,6 @@ LOGGING = {
             "level": "DEBUG",
             "propagate": False,
         },
-        # Django internals - only warnings and above to keep terminal clean
         "django": {
             "handlers": ["console"],
             "level": "WARNING",
@@ -239,16 +262,31 @@ SPECTACULAR_SETTINGS = {
     },
 }
 
+""" Cache - Redis Backend """
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": config("REDIS_URL", default="redis://127.0.0.1:6379/1"),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "SOCKET_CONNECT_TIMEOUT": 5,
+            "SOCKET_TIMEOUT": 5,
+            "IGNORE_EXCEPTIONS": True,  # never crash the app if Redis is down
+        },
+        "KEY_PREFIX": "social_erp",
+    }
+}
+
+
 """Simple and classic Jazzmin admin interface settings"""
+
 JAZZMIN_SETTINGS = {
-    # ── Branding ──
     "site_title": "Betopian Admin",
     "site_header": "Betopian Administration",
     "site_brand": "Betopian",
-    # ── Custom assets ──
     "custom_css": "admin/css/betopian.css",
     "custom_js": "admin/js/betopian.js",
-    # ── Sidebar ──
     "show_sidebar": True,
     "navigation_expanded": False,
     "order_with_respect_to": [
@@ -256,13 +294,11 @@ JAZZMIN_SETTINGS = {
         "auth.user",
         "auth.group",
     ],
-    # ── Icons ──
     "icons": {
         "auth": "fas fa-users-cog",
         "auth.user": "fas fa-user",
         "auth.group": "fas fa-users",
     },
-    # ── Custom links ──
     "custom_links": {
         "auth": [
             {
@@ -272,13 +308,12 @@ JAZZMIN_SETTINGS = {
             }
         ]
     },
-    # ── Misc ──
     "related_modal_active": True,
     "show_ui_builder": False,
 }
 
 JAZZMIN_UI_TWEAKS = {
-    "theme": "flatly",  # light theme (you can also try "litera" or "cosmo")
+    "theme": "flatly",
     "navbar": "navbar-light",
     "sidebar": "sidebar-light-primary",
     "accent": "accent-primary",
@@ -291,11 +326,12 @@ JAZZMIN_UI_TWEAKS = {
     "actions_sticky_top": True,
     "navigation_expanded": True,
 }
+
+""" Debugging Third Party Site"""
+
 import sentry_sdk
 
 sentry_sdk.init(
     dsn="https://73fd8f8695bcbc9e7ea3441bb120546c@o4511380585250816.ingest.us.sentry.io/4511380587216896",
-    # Add data like request headers and IP for users,
-    # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
     send_default_pii=True,
 )

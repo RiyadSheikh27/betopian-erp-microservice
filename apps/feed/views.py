@@ -1,6 +1,8 @@
 import base64
 import logging
 
+from apps.utils.throttles import FeedThrottle
+
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from django.db.models import Count, Exists, OuterRef, Prefetch, Q
@@ -61,6 +63,7 @@ class PostNewsFeedView(APIView):
     """All public posts from all users, newest first."""
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [FeedThrottle]
 
     def get(self, request):
         page_size = _parse_page_size(request)
@@ -136,9 +139,10 @@ class PostNewsFeedView(APIView):
 
 
 class ReelNewsFeedView(APIView):
-    """Unified reel feed — direct reels + post videos merged."""
+    """Unified reel feed - direct reels + post videos merged."""
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [FeedThrottle]
 
     def get(self, request):
         page_size = _parse_page_size(request)
@@ -289,6 +293,7 @@ class CommunityPostFeedView(APIView):
     """Posts from a specific community, newest first."""
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [FeedThrottle]
 
     def get(self, request, community_id):
         if not CommunityMember.objects.filter(
