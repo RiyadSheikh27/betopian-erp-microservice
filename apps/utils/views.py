@@ -49,22 +49,18 @@ class ProfileImageUploadView(APIView):
 
 """ Dynamic Media Handling Seciton """
 
-from django.conf import settings as django_settings
-from django.db.utils import OperationalError, ProgrammingError
+from django.conf import settings
 from .models import MediaHandling
 
 
-def load_media_handling():
+def apply_media_settings(**kwargs):
     try:
-        config = MediaHandling.objects.first()
-    except (OperationalError, ProgrammingError):
-        return  # DB not ready yet
-
-    if not config:
-        return
-
-    django_settings.IMAGE_UPLOAD_MAX_SIZE_MB = config.image_upload_max_size_mb
-    django_settings.VIDEO_UPLOAD_MAX_SIZE_MB = config.video_upload_max_size_mb
-    django_settings.IMAGE_COMPRESSION_QUALITY = config.image_compression_quality
-    django_settings.IMAGE_MAX_DIMENSION = config.image_max_dimension
-    django_settings.AVATAR_MAX_DIMENSION = config.avatar_max_dimension
+        config = MediaHandling.objects.last() 
+        if config:
+            settings.IMAGE_UPLOAD_MAX_SIZE_MB  = config.image_upload_max_size_mb
+            settings.VIDEO_UPLOAD_MAX_SIZE_MB  = config.video_upload_max_size_mb
+            settings.IMAGE_COMPRESSION_QUALITY = config.image_compression_quality
+            settings.IMAGE_MAX_DIMENSION       = config.image_max_dimension
+            settings.AVATAR_MAX_DIMENSION      = config.avatar_max_dimension
+    except Exception:
+        pass

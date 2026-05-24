@@ -1,9 +1,9 @@
 from django.apps import AppConfig
 
 class UtilsConfig(AppConfig):
-    default_auto_field = "django.db.models.BigAutoField"
     name = "apps.utils"
 
     def ready(self):
-        from .views import load_media_handling
-        load_media_handling()
+        from django.core.signals import request_started
+        from .views import apply_media_settings
+        request_started.connect(apply_media_settings)
