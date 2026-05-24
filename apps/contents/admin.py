@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Community, CommunityMember, Post, PostMedia, Reel
+from .models import Community, CommunityMember, Post, PostMedia, Reel, ReelView
 
 """ Inline for Post Media """
 
@@ -86,3 +86,33 @@ class ReelAdmin(admin.ModelAdmin):
     autocomplete_fields = ("author",)
     ordering = ("-created_at",)
     readonly_fields = ("created_at", "updated_at")
+
+@admin.register(ReelView)
+class ReelViewAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "user",
+        "content_type",
+        "object_id",
+        "view_count",
+        "created_at",
+    )
+
+    list_filter = (
+        "content_type",
+        "created_at",
+    )
+
+    search_fields = (
+        "user__username",
+        "object_id",
+    )
+
+    autocomplete_fields = ("user",)
+
+    ordering = ("-created_at",)
+
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+    )

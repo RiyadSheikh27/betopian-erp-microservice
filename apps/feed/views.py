@@ -304,6 +304,10 @@ class CommunityPostFeedView(APIView):
                 status_code=403,
             )
 
+        member_count = CommunityMember.objects.filter(  # ADD
+            community_id=community_id  # ADD
+        ).count()
+
         page_size = _parse_page_size(request)
         post_ct = ContentType.objects.get_for_model(Post)
 
@@ -369,5 +373,6 @@ class CommunityPostFeedView(APIView):
                 "next_cursor": next_cursor,
                 "has_more": has_more,
                 "page_size": page_size,
+                "member_count": member_count,
             },
         )

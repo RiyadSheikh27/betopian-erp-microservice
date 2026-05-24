@@ -3,6 +3,9 @@ from django.db import models
 from apps.utils.models import TimeStampedModel
 from django.contrib.contenttypes.fields import GenericRelation
 
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericForeignKey
+
 
 """ Community Section """
 
@@ -170,3 +173,30 @@ class Reel(TimeStampedModel):
 
     def __str__(self):
         return f"Reel {self.pk} by {self.author.username}"
+    
+    
+class ReelView(TimeStampedModel):
+    """ Count of view in Reel Section """
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="reel_views")
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.UUIDField()
+    content_object = GenericForeignKey("content_type", "object_id")
+    view_count = models.PositiveSmallIntegerField(default=1)
+    
+    class Meta(TimeStampedModel.Meta):
+        db_table    = "reel_views"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "content_type", "object_id"],
+                name="unique_reel_view_per_user",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["content_type", "object_id"],
+                name="idx_reelview_target",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} viewed {self.object_id} x{self.view_count}"

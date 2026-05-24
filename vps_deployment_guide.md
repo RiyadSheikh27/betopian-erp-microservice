@@ -377,3 +377,5 @@ systemctl reload nginx
 | Check VPS IP | `curl ifconfig.me` |
 | Check DNS | `dig social-media.betopiagroup.com +short` |
 | Check DB permissions | `su - postgres && psql -d betopian_db -c "\dn+"` |
+| Redis Start Command | `sudo systemctl start redis-server` |
+| Verify Redis | `redis-cli ping` |

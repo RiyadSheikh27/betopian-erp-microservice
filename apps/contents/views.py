@@ -1,5 +1,6 @@
 import base64
 import logging
+from django.conf import settings
 
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -9,7 +10,7 @@ from django.db.models import Count, F, Prefetch, Exists, OuterRef
 from apps.utils.throttles import UploadThrottle, FeedThrottle
 
 from apps.utils.response import APIResponse
-from .models import Post, PostMedia, Reel, Community, CommunityMember
+from .models import Post, PostMedia, Reel, Community, CommunityMember, ReelView
 from .serializers import (
     PostSerializer,
     PostCreateSerializer,
@@ -19,7 +20,10 @@ from .serializers import (
     ReelUpdateSerializer,
 )
 
+from django.contrib.contenttypes.models import ContentType
+
 logger = logging.getLogger("apps.contents")
+
 
 """ HELPER FUNCTIONS """
 
@@ -451,30 +455,54 @@ class ReelViewCountView(APIView):
 
     def post(self, request, pk):
         source = request.query_params.get("source", "direct")
+        max_views = getattr(settings, "REEL_MAX_VIEWS_PER_USER", 5)
 
         if source == "post":
-            from .models import PostMedia
-
-            updated = PostMedia.objects.filter(
-                pk=pk,
-                post__privacy=Post.Privacy.PUBLIC,
-                media_type=PostMedia.MediaType.VIDEO,
-            ).update(view_count=F("view_count") + 1)
-
-            if not updated:
+            model = PostMedia
+            try:
+                PostMedia.objects.get(
+                    pk=pk,
+                    media_type=PostMedia.MediaType.VIDEO,
+                )
+            except PostMedia.DoesNotExist:
                 return APIResponse.error(message="Media not found.", status_code=404)
-
         else:
-            updated = Reel.objects.filter(
-                pk=pk,
-                privacy=Reel.Privacy.PUBLIC,
-            ).update(view_count=F("view_count") + 1)
-
-            if not updated:
+            model = Reel
+            try:
+                Reel.objects.get(pk=pk)
+            except Reel.DoesNotExist:
                 return APIResponse.error(message="Reel not found.", status_code=404)
 
+        content_type = ContentType.objects.get_for_model(model)
+
+        # Get or create user's view record for this video
+        reel_view, created = ReelView.objects.get_or_create(
+            user=request.user,
+            content_type=content_type,
+            object_id=pk,
+            defaults={"view_count": 0},
+        )
+
+        if reel_view.view_count >= max_views:
+            # User has already hit the limit — return silently
+            logger.debug(
+                "View limit reached | source=%s id=%s user_id=%s count=%s max=%s",
+                source,
+                pk,
+                request.user.pk,
+                reel_view.view_count,
+                max_views,
+            )
+            return APIResponse.success(message="View recorded.")
+
+        # Increment user's personal view count atomically
+        ReelView.objects.filter(pk=reel_view.pk).update(view_count=F("view_count") + 1)
+
+        # Increment the actual video's view count atomically
+        model.objects.filter(pk=pk).update(view_count=F("view_count") + 1)
+
         logger.debug(
-            "Reel view counted | source=%s id=%s user_id=%s",
+            "View counted | source=%s id=%s user_id=%s",
             source,
             pk,
             request.user.pk,
@@ -500,4 +528,57 @@ class CommunityListView(APIView):
             data=CommunitySerializer(
                 communities, many=True, context={"request": request}
             ).data
+        )
+
+
+class CommunityMemberListView(APIView):
+    """
+    Returns paginated list of members for a community.
+    Only accessible to members of that community.
+
+    Response per member: central_id, name, avatar_url only.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, community_id):
+        # Only members can see the member list
+        if not CommunityMember.objects.filter(
+            user=request.user, community_id=community_id
+        ).exists():
+            return APIResponse.error(message="Community not found.", status_code=404)
+
+        try:
+            page_size = min(int(request.query_params.get("page_size", 20)), 50)
+            page = max(int(request.query_params.get("page", 1)), 1)
+        except (TypeError, ValueError):
+            page_size, page = 20, 1
+
+        members = (
+            CommunityMember.objects.filter(community_id=community_id)
+            .select_related("user")
+            .order_by("user__name")
+        )
+
+        total = members.count()
+        offset = (page - 1) * page_size
+        items = members[offset : offset + page_size]
+
+        data = [
+            {
+                "central_id": m.user.central_id,
+                "name": m.user.name,
+                "avatar_url": m.user.avatar_url,
+            }
+            for m in items
+        ]
+
+        return APIResponse.success(
+            data=data,
+            meta={
+                "page": page,
+                "page_size": page_size,
+                "total": total,
+                "total_pages": -(-total // page_size),
+            },
         )

@@ -7,6 +7,7 @@ from apps.contents.views import (
     ReelDetailView,
     ReelViewCountView,
     CommunityListView,
+    CommunityMemberListView
 )
 from apps.feed.views import CommunityPostFeedView, PostNewsFeedView, ReelNewsFeedView
 from apps.interactions.views import (
@@ -45,6 +46,7 @@ contents_urlpatterns = [
     path("reels/<uuid:pk>/", ReelDetailView.as_view(), name="reel-detail"),
     path("reels/<uuid:pk>/view/", ReelViewCountView.as_view(), name="reel-view-count"),
     path("communities/", CommunityListView.as_view(), name="community-list"),
+    path("communities/<uuid:community_id>/members/", CommunityMemberListView.as_view(), name="community-members"),
 ]
 
 feed_urlpatterns = [
