@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from apps.utils.response import APIResponse
 from .models import EbookTitle, Ebook
 from .serializers import EbookTitleSerializer, EbookSerializer
+from django.db.models import Q
 
 logger = logging.getLogger("apps.ebook")
 
@@ -31,9 +32,9 @@ class EbookTitleListView(APIView):
 
 class EbookListView(APIView):
     """
-    GET /ebooks/ - list all ebooks.
+    GET /ebooks/
     Query params:
-      search - filter by category name (partial, case-insensitive).
+      search- filter by file_name or category title (partial, case-insensitive).
       category_id - filter by exact EbookTitle id.
     """
 
@@ -44,11 +45,14 @@ class EbookListView(APIView):
 
         search = request.query_params.get("search", "").strip()
         if search:
-            qs = qs.filter(category__category_title__icontains=search)
+            qs = qs.filter(
+                Q(file_name__icontains=search)
+                | Q(category__category_title__icontains=search)
+            )
 
-        title_id = request.query_params.get("title_id", "").strip()
-        if title_id:
-            qs = qs.filter(category_id=title_id)
+        category_id = request.query_params.get("category_id", "").strip()
+        if category_id:
+            qs = qs.filter(category_id=category_id)
 
         return APIResponse.success(
             data=EbookSerializer(qs, many=True, context={"request": request}).data

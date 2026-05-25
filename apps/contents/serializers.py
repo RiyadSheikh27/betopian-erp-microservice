@@ -95,6 +95,7 @@ class PostSerializer(serializers.ModelSerializer):
     like_count = serializers.IntegerField(read_only=True, default=0)
     comment_count = serializers.IntegerField(read_only=True, default=0)
     is_liked = serializers.BooleanField(read_only=True, default=False)
+    is_saved = serializers.BooleanField(read_only=True, default=False)  # ADD
 
     class Meta:
         model = Post
@@ -110,6 +111,7 @@ class PostSerializer(serializers.ModelSerializer):
             "like_count",
             "comment_count",
             "is_liked",
+            "is_saved",
             "created_at",
             "updated_at",
         )
@@ -320,6 +322,7 @@ class ReelSerializer(serializers.ModelSerializer):
     like_count = serializers.IntegerField(read_only=True, default=0)
     comment_count = serializers.IntegerField(read_only=True, default=0)
     is_liked = serializers.BooleanField(read_only=True, default=False)
+    is_saved = serializers.BooleanField(read_only=True, default=False)
 
     class Meta:
         model = Reel
@@ -333,6 +336,7 @@ class ReelSerializer(serializers.ModelSerializer):
             "like_count",
             "comment_count",
             "is_liked",
+            "is_saved",
             "is_edited",
             "created_at",
             "updated_at",

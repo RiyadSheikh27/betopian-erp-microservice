@@ -6,8 +6,8 @@ from django.contrib.contenttypes.fields import GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
 
-
 """ Community Section """
+
 
 class Community(TimeStampedModel):
     """Community model for group posting and interactions."""
@@ -129,7 +129,7 @@ class PostMedia(TimeStampedModel):
     class Meta(TimeStampedModel.Meta):
         db_table = "Post_media"
         ordering = ["order"]
-        indexes  = [
+        indexes = [
             models.Index(
                 fields=["media_type", "-created_at"],
                 name="idx_postmedia_type_created",
@@ -173,18 +173,21 @@ class Reel(TimeStampedModel):
 
     def __str__(self):
         return f"Reel {self.pk} by {self.author.username}"
-    
-    
+
+
 class ReelView(TimeStampedModel):
-    """ Count of view in Reel Section """
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="reel_views")
+    """Count of view in Reel Section"""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="reel_views"
+    )
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     object_id = models.UUIDField()
     content_object = GenericForeignKey("content_type", "object_id")
     view_count = models.PositiveSmallIntegerField(default=1)
-    
+
     class Meta(TimeStampedModel.Meta):
-        db_table    = "reel_views"
+        db_table = "reel_views"
         constraints = [
             models.UniqueConstraint(
                 fields=["user", "content_type", "object_id"],
@@ -200,3 +203,36 @@ class ReelView(TimeStampedModel):
 
     def __str__(self):
         return f"{self.user.username} viewed {self.object_id} x{self.view_count}"
+
+
+class SavedItem(TimeStampedModel):
+    """Save any post or reel for latter viewing"""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="saved_items",
+    )
+    content_type = models.ForeignKey(
+        "contenttypes.ContentType", on_delete=models.CASCADE
+    )
+    object_id = models.UUIDField()
+    content_object = GenericForeignKey("content_type", "object_id")
+
+    class Meta(TimeStampedModel.Meta):
+        db_table = "saved_items"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "content_type", "object_id"],
+                name="unique_saved_item_per_user",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["user", "-created_at"],
+                name="idx_saved_user_created",
+            ),
+        ]
+        
+    def __str__(self):
+        return f"{self.user.username} saved {self.content_type} {self.object_id}"

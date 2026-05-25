@@ -9,8 +9,19 @@ from django.db.models import Count, F, Prefetch, Exists, OuterRef
 
 from apps.utils.throttles import UploadThrottle, FeedThrottle
 
+from django.contrib.contenttypes.models import ContentType
+from apps.interactions.models import Like
+
 from apps.utils.response import APIResponse
-from .models import Post, PostMedia, Reel, Community, CommunityMember, ReelView
+from .models import (
+    Post,
+    PostMedia,
+    Reel,
+    Community,
+    CommunityMember,
+    ReelView,
+    SavedItem,
+)
 from .serializers import (
     PostSerializer,
     PostCreateSerializer,
@@ -72,8 +83,6 @@ def _paginate_cursor(queryset, page_size):
 
 
 def _post_queryset(user=None):
-    from django.contrib.contenttypes.models import ContentType
-    from apps.interactions.models import Like
 
     qs = (
         Post.objects.select_related("author", "community")
@@ -95,14 +104,19 @@ def _post_queryset(user=None):
                     object_id=OuterRef("pk"),
                     user=user,
                 )
-            )
+            ),
+            is_saved=Exists(                           
+                SavedItem.objects.filter(                  
+                    content_type=post_ct,                     
+                    object_id=OuterRef("pk"),                  
+                    user=user,                                
+                )                                         
+            ),                                          
         )
     return qs
 
 
 def _reel_queryset(user=None):
-    from django.contrib.contenttypes.models import ContentType
-    from apps.interactions.models import Like
 
     qs = (
         Reel.objects.select_related("author")
@@ -122,7 +136,14 @@ def _reel_queryset(user=None):
                     object_id=OuterRef("pk"),
                     user=user,
                 )
-            )
+            ),
+            is_saved=Exists(                                      
+                SavedItem.objects.filter(                            
+                    content_type=reel_ct,                           
+                    object_id=OuterRef("pk"),                     
+                    user=user,                                    
+                )                                             
+            )                                                      
         )
     return qs
 
@@ -566,8 +587,10 @@ class CommunityMemberListView(APIView):
 
         data = [
             {
-                "central_id": m.user.central_id,
+                "id": m.user.id,
+                "employee_id": m.user.employee_id,
                 "name": m.user.name,
+                "position": m.user.position,
                 "avatar_url": m.user.avatar_url,
             }
             for m in items
@@ -580,5 +603,228 @@ class CommunityMemberListView(APIView):
                 "page_size": page_size,
                 "total": total,
                 "total_pages": -(-total // page_size),
+            },
+        )
+
+
+class SaveToggleView(APIView):
+    """Toggle save on any post, reel or post video"""
+
+    permission_classes = [IsAuthenticated]
+
+    TARGET_MAP = {
+        "post": Post,
+        "reel": Reel,
+        "post_video": PostMedia,
+    }
+
+    def post(self, request, target_type, pk):
+        model = self.TARGET_MAP.get(target_type)
+        if not model:
+            return APIResponse.error(
+                error={
+                    "target_type": f"Invalid Type '{target_type}'. User post, reel or post_video."
+                },
+                status_code=400,
+            )
+
+        if not model.objects.filter(pk=pk).exists():
+            return APIResponse.error(message="Not found", status_code=400)
+
+        content_type = ContentType.objects.get_for_model(model)
+
+        saved_item, created = SavedItem.objects.get_or_create(
+            user=request.user,
+            content_type=content_type,
+            object_id=pk,
+        )
+
+        if not created:
+            saved_item.delete()
+            saved = False
+        else:
+            saved = True
+
+        logger.info(
+            "Save toggled | user_id=%s target=%s pk=%s saved=%s",
+            request.user.pk,
+            target_type,
+            pk,
+            saved,
+        )
+        return APIResponse.success(
+            data={"saved": saved},
+            message="Saved." if saved else "Unsaved.",
+        )
+
+
+class SavedItemListView(APIView):
+    """
+    Returns paginated list of the user's saved items.
+    Cursor-based pagination — newest saved first.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from apps.feed.serializers import NFFeedPostSerializer, NFFeedReelSerializer
+
+        try:
+            page_size = min(int(request.query_params.get("page_size", 10)), 50)
+        except (TypeError, ValueError):
+            page_size = 10
+
+        # Optional type filter
+        filter_type = request.query_params.get("type")
+
+        # Build content type map
+        post_ct = ContentType.objects.get_for_model(Post)
+        reel_ct = ContentType.objects.get_for_model(Reel)
+        post_media_ct = ContentType.objects.get_for_model(PostMedia)
+
+        type_map = {
+            "post": post_ct,
+            # "reel" filter now covers both reel and post_video
+        }
+
+        qs = SavedItem.objects.filter(user=request.user).order_by("-created_at")
+
+        if filter_type == "post":
+            qs = qs.filter(content_type=post_ct)
+        elif filter_type == "reel":
+            # Filter returns both direct reels AND post videos together
+            qs = qs.filter(content_type__in=[reel_ct, post_media_ct])
+        # No filter — return everything
+
+        # Cursor pagination
+        cursor_str = request.query_params.get("cursor")
+        if cursor_str:
+            decoded = _decode_cursor(cursor_str)
+            if not decoded:
+                return APIResponse.error(
+                    errors={"cursor": "Invalid cursor."}, status_code=400
+                )
+            created_at_str, obj_id = decoded
+            from django.db.models import Q
+
+            qs = qs.filter(
+                Q(created_at__lt=created_at_str)
+                | Q(created_at=created_at_str, id__lt=obj_id)
+            )
+
+        items = list(qs[: page_size + 1])
+        has_more = len(items) > page_size
+        if has_more:
+            items = items[:page_size]
+
+        next_cursor = (
+            _encode_cursor(items[-1].created_at, items[-1].id) if has_more else None
+        )
+
+        # Collect all IDs per type for bulk fetching
+        post_ids = [i.object_id for i in items if i.content_type_id == post_ct.id]
+        reel_ids = [i.object_id for i in items if i.content_type_id == reel_ct.id]
+        post_video_ids = [
+            i.object_id for i in items if i.content_type_id == post_media_ct.id
+        ]
+
+        # Fetch actual objects in bulk — no N+1
+        posts = (
+            {p.id: p for p in _post_queryset(request.user).filter(id__in=post_ids)}
+            if post_ids
+            else {}
+        )
+
+        reels = (
+            {r.id: r for r in _reel_queryset(request.user).filter(id__in=reel_ids)}
+            if reel_ids
+            else {}
+        )
+
+        from django.db.models import Count, Exists, OuterRef
+        from apps.interactions.models import Like
+
+        post_videos = {}
+        if post_video_ids:
+            media_ct = ContentType.objects.get_for_model(PostMedia)
+            pv_qs = (
+                PostMedia.objects.filter(
+                    id__in=post_video_ids,
+                    media_type=PostMedia.MediaType.VIDEO,
+                )
+                .select_related("post__author", "post__community")
+                .annotate(
+                    like_count=Count("likes", distinct=True),
+                    comment_count=Count("comments", distinct=True),
+                    is_liked=Exists(
+                        Like.objects.filter(
+                            content_type=media_ct,
+                            object_id=OuterRef("pk"),
+                            user=request.user,
+                        )
+                    ),
+                )
+            )
+            post_videos = {pv.id: pv for pv in pv_qs}
+
+        # Build unified response preserving saved order
+        result = []
+        for item in items:
+            ct_id = item.content_type_id
+            oid   = item.object_id
+        
+            if ct_id == post_ct.id and oid in posts:
+                post = posts[oid]
+                result.append({
+                    "type":     "post",
+                    "saved_at": item.created_at,
+                    "data":     NFFeedPostSerializer(post, context={"request": request}).data,
+                })
+        
+            elif ct_id == reel_ct.id and oid in reels:
+                reel = reels[oid]
+                result.append({
+                    "type":     "reel",      # direct reel
+                    "source":   "direct",
+                    "saved_at": item.created_at,
+                    "data":     ReelSerializer(reel, context={"request": request}).data,
+                })
+        
+            elif ct_id == post_media_ct.id and oid in post_videos:
+                pm = post_videos[oid]
+                result.append({
+                    "type":     "reel",      # post video — same type as direct reel
+                    "source":   "post",      # Flutter uses source to differentiate if needed
+                    "saved_at": item.created_at,
+                    "data": {
+                        "id":            pm.id,
+                        "source":        "post",
+                        "author": {
+                            "id":         pm.post.author.id,
+                            "central_id": pm.post.author.central_id,
+                            "name":       pm.post.author.name,
+                            "avatar_url": pm.post.author.avatar_url,
+                        },
+                        "caption":       pm.caption,
+                        "video_url":     request.build_absolute_uri(pm.file.url),
+                        "like_count":    pm.like_count,
+                        "comment_count": pm.comment_count,
+                        "is_liked":      pm.is_liked,
+                        "view_count":    pm.view_count,
+                        "community":     pm.post.community.name if pm.post.community else None,
+                    },
+                })
+        logger.debug(
+            "Saved list | user_id=%s page_size=%s has_more=%s",
+            request.user.pk,
+            page_size,
+            has_more,
+        )
+        return APIResponse.success(
+            data=result,
+            meta={
+                "next_cursor": next_cursor,
+                "has_more": has_more,
+                "page_size": page_size,
             },
         )

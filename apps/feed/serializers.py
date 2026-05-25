@@ -28,6 +28,7 @@ class NFFeedPostSerializer(serializers.Serializer):
     like_count = serializers.IntegerField(default=0)
     comment_count = serializers.IntegerField(default=0)
     is_liked = serializers.BooleanField(default=False)
+    is_saved = serializers.BooleanField(default=False)
     community = CommunitySerializer(read_only=True)
     created_at = serializers.DateTimeField()
     updated_at = serializers.DateTimeField()
@@ -39,6 +40,28 @@ class NFFeedPostSerializer(serializers.Serializer):
 
 
 class NFFeedReelSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    source = serializers.CharField()
+    author = PostAuthorSerializer()
+    caption = serializers.CharField()
+    video_url = serializers.SerializerMethodField()
+    privacy = serializers.CharField()
+    view_count = serializers.IntegerField()
+    like_count = serializers.IntegerField(default=0)
+    comment_count = serializers.IntegerField(default=0)
+    is_liked = serializers.BooleanField(default=False)
+    is_saved = serializers.BooleanField(default=False)
+    created_at = serializers.DateTimeField()
+
+    def get_video_url(self, obj):
+        return obj.get("video_url", "")
+
+    def to_representation(self, instance):
+        self.fields["author"].context.update(self.context)
+        return super().to_representation(instance)
+
+
+class NFFeedCommunitySerializer(serializers.Serializer):
     id = serializers.UUIDField()
     source = serializers.CharField()
     author = PostAuthorSerializer()

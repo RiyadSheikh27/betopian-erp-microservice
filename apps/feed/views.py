@@ -10,7 +10,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
 from apps.utils.response import APIResponse
-from apps.contents.models import Post, PostMedia, Reel, CommunityMember
+from apps.contents.models import Post, PostMedia, Reel, CommunityMember, SavedItem
 from apps.interactions.models import Like
 
 from .serializers import NFFeedPostSerializer, NFFeedReelSerializer
@@ -88,6 +88,13 @@ class PostNewsFeedView(APIView):
                 comment_count=Count("comments", distinct=True),
                 is_liked=Exists(
                     Like.objects.filter(
+                        content_type=post_ct,
+                        object_id=OuterRef("pk"),
+                        user=request.user,
+                    )
+                ),
+                is_saved=Exists(
+                    SavedItem.objects.filter(
                         content_type=post_ct,
                         object_id=OuterRef("pk"),
                         user=request.user,
@@ -176,6 +183,13 @@ class ReelNewsFeedView(APIView):
                         user=request.user,
                     )
                 ),
+                is_saved=Exists(
+                    SavedItem.objects.filter(
+                        content_type=reel_ct,
+                        object_id=OuterRef("pk"),
+                        user=request.user,
+                    )
+                ),
             )
             .order_by("-created_at", "-id")
         )
@@ -211,6 +225,13 @@ class ReelNewsFeedView(APIView):
                         user=request.user,
                     )
                 ),
+                is_saved=Exists(
+                    SavedItem.objects.filter(
+                        content_type=media_ct,
+                        object_id=OuterRef("pk"),
+                        user=request.user,
+                    )
+                ),
             )
             .order_by("-created_at", "-id")
         )
@@ -239,6 +260,7 @@ class ReelNewsFeedView(APIView):
                     "like_count": r.like_count,
                     "comment_count": r.comment_count,
                     "is_liked": r.is_liked,
+                    "is_saved": r.is_saved,
                     "view_count": r.view_count,
                     "created_at": r.created_at,
                 }
@@ -256,6 +278,7 @@ class ReelNewsFeedView(APIView):
                     "like_count": pm.like_count,
                     "comment_count": pm.comment_count,
                     "is_liked": pm.is_liked,
+                    "is_saved": pm.is_saved,
                     "view_count": pm.view_count,
                     "created_at": pm.created_at,
                 }
@@ -304,8 +327,8 @@ class CommunityPostFeedView(APIView):
                 status_code=403,
             )
 
-        member_count = CommunityMember.objects.filter(  # ADD
-            community_id=community_id  # ADD
+        member_count = CommunityMember.objects.filter(  
+            community_id=community_id 
         ).count()
 
         page_size = _parse_page_size(request)
