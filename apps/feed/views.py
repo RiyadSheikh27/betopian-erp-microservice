@@ -67,15 +67,14 @@ class PostNewsFeedView(APIView):
 
     def get(self, request):
         page_size = _parse_page_size(request)
+        search = request.query_params.get("search", "").strip()
         post_ct = ContentType.objects.get_for_model(Post)
 
         qs = (
             Post.objects.filter(privacy=Post.Privacy.PUBLIC)
             .filter(
                 models.Q(community__isnull=True)
-                | models.Q(
-                    community__members__user=request.user
-                )  # community posts where user is member
+                | models.Q(community__members__user=request.user)
             )
             .distinct()
             .select_related("author")
@@ -101,8 +100,12 @@ class PostNewsFeedView(APIView):
                     )
                 ),
             )
-            .order_by("-created_at", "-id")
         )
+
+        if search:
+            qs = qs.filter(caption__icontains=search)
+
+        qs = qs.order_by("-created_at", "-id")
 
         cursor_str = request.query_params.get("cursor")
         if cursor_str:
@@ -327,11 +330,10 @@ class CommunityPostFeedView(APIView):
                 status_code=403,
             )
 
-        member_count = CommunityMember.objects.filter(  
-            community_id=community_id 
-        ).count()
+        member_count = CommunityMember.objects.filter(community_id=community_id).count()
 
         page_size = _parse_page_size(request)
+        search = request.query_params.get("search", "").strip()
         post_ct = ContentType.objects.get_for_model(Post)
 
         qs = (
@@ -352,8 +354,11 @@ class CommunityPostFeedView(APIView):
                     )
                 ),
             )
-            .order_by("-created_at", "-id")
         )
+        if search:
+            qs = qs.filter(caption__icontains=search)
+
+        qs = qs.order_by("-created_at", "-id")
 
         cursor_str = request.query_params.get("cursor")
         if cursor_str:

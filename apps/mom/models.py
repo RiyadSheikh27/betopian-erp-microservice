@@ -58,7 +58,11 @@ class MeetingParticipant(TimeStampedModel):
     central_id = models.BigIntegerField(db_index=True)
 
     # Cached profile fields (populated from employee-directory API) ---
-    employee_id = models.CharField(max_length=50, blank=True)
+    # The central directory uses `employee_code` as the key in its API.
+    # The DB currently contains `employee_code`, so we store that field
+    # and provide a backward-compatible `employee_id` property used
+    # elsewhere in the codebase.
+    employee_code = models.CharField(max_length=50, blank=True)
     username = models.CharField(max_length=255, blank=True)
     avatar_url = models.URLField(max_length=10_000, blank=True)
     designation = models.CharField(max_length=255, blank=True)
@@ -83,6 +87,14 @@ class MeetingParticipant(TimeStampedModel):
     def __str__(self):
         return f"{self.username or self.central_id} in '{self.meeting.title}'"
 
+    @property
+    def employee_id(self):
+        return self.employee_code
+
+    @employee_id.setter
+    def employee_id(self, value):
+        self.employee_code = value
+
 
 class AgendaItem(TimeStampedModel):
     """A single agenda item belonging to a meeting."""
@@ -105,9 +117,7 @@ class AgendaItem(TimeStampedModel):
 class MeetingNote(TimeStampedModel):
     """A note written by a participant during or after a meeting."""
 
-    meeting = models.ForeignKey(
-        Meeting, on_delete=models.CASCADE, related_name="notes"
-    )
+    meeting = models.ForeignKey(Meeting, on_delete=models.CASCADE, related_name="notes")
     description = models.TextField()
     created_by_central_id = models.BigIntegerField(db_index=True)
     is_pinned = models.BooleanField(default=False)
