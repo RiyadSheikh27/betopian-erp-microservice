@@ -4,9 +4,9 @@ from .models import Like, Comment
 
 @admin.register(Like)
 class LikeAdmin(admin.ModelAdmin):
-    list_display = ("user", "content_type", "object_id", "created_at")
-    list_filter = ("content_type",)
-    search_fields = ("user__username", "user__name", "object_id")
+    list_display = ("user", "content_type", "object_id", "reaction", "created_at")
+    list_filter = ("content_type", "reaction")
+    search_fields = ("user__username", "user__name", "reaction", "object_id")
     readonly_fields = ("user", "content_type", "object_id", "created_at")
 
 

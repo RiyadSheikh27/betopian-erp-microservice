@@ -83,8 +83,16 @@ def _build_comment_tree(comments):
 
 
 class LikeToggleView(APIView):
+    """
+    Toggle or switch reaction on any target — post, media item or reel.
+
+    Rules:
+      - No existing reaction: create with given reaction
+      - Same reaction exists: remove it (toggle off)
+      - Different reaction exists: update to new reaction (switch)
+    """
+
     permission_classes = [IsAuthenticated]
-    throttle_classes = [InteractionThrottle]
 
     def post(self, request, target_type, pk):
         content_type, model = _get_content_type(target_type)
@@ -96,6 +104,17 @@ class LikeToggleView(APIView):
                 status_code=400,
             )
 
+        # Validate reaction
+        reaction = request.data.get("reaction", "").lower()
+        if reaction not in Like.Reaction.values:
+            return APIResponse.error(
+                errors={
+                    "reaction": f"Invalid reaction. Choose from: {', '.join(Like.Reaction.values)}"
+                },
+                status_code=400,
+            )
+
+        # Verify target exists
         try:
             if target_type == "media":
                 model.objects.get(pk=pk, post__privacy=Post.Privacy.PUBLIC)
@@ -106,38 +125,76 @@ class LikeToggleView(APIView):
         except model.DoesNotExist:
             return APIResponse.error(message="Target not found.", status_code=404)
 
-        like, created = Like.objects.get_or_create(
+        existing = Like.objects.filter(
             user=request.user,
             content_type=content_type,
             object_id=pk,
-        )
-        if not created:
-            like.delete()
-            liked = False
-        else:
-            liked = True
+        ).first()
 
+        if existing:
+            if existing.reaction == reaction:
+                # Same reaction - toggle off
+                existing.delete()
+                reacted = False
+                reaction = None
+            else:
+                # Different reaction — switch
+                existing.reaction = reaction
+                existing.save(update_fields=["reaction", "updated_at"])
+                reacted = True
+        else:
+            # No existing reaction - create
+            Like.objects.create(
+                user=request.user,
+                content_type=content_type,
+                object_id=pk,
+                reaction=reaction,
+            )
+            reacted = True
+
+        # Live counts
         like_count = Like.objects.filter(
             content_type=content_type,
             object_id=pk,
         ).count()
 
+        # Per-reaction breakdown
+        reaction_counts = {
+            r: Like.objects.filter(
+                content_type=content_type,
+                object_id=pk,
+                reaction=r,
+            ).count()
+            for r in Like.Reaction.values
+        }
+
         logger.info(
-            "Like toggled | user_id=%s target=%s pk=%s liked=%s count=%s",
+            "Reaction toggled | user_id=%s target=%s pk=%s reaction=%s reacted=%s",
             request.user.pk,
             target_type,
             pk,
-            liked,
-            like_count,
+            reaction,
+            reacted,
         )
 
         return APIResponse.success(
-            data={"liked": liked, "like_count": like_count},
-            message="Liked." if liked else "Unliked.",
+            data={
+                "reacted": reacted,
+                "reaction": reaction,
+                "total_count": like_count,
+                "reaction_counts": reaction_counts,
+            },
+            message=f"Reacted with {reaction}." if reacted else "Reaction removed.",
         )
 
 
 class LikerListView(APIView):
+    """
+    Paginated list of users who reacted to a target.
+
+    Meta includes total count + per-reaction breakdown.
+    """
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request, target_type, pk):
@@ -156,21 +213,43 @@ class LikerListView(APIView):
         except (TypeError, ValueError):
             page_size, page = 20, 1
 
+        # Base queryset
         likes = (
             Like.objects.filter(content_type=content_type, object_id=pk)
             .select_related("user")
             .order_by("-created_at")
         )
 
-        total = likes.count()
+        # Filter by reaction type
+        reaction_filter = request.query_params.get("reaction", "").lower()
+        if reaction_filter:
+            if reaction_filter not in Like.Reaction.values:
+                return APIResponse.error(
+                    errors={
+                        "reaction": f"Invalid reaction. Choose from: {', '.join(Like.Reaction.values)}"
+                    },
+                    status_code=400,
+                )
+            likes = likes.filter(reaction=reaction_filter)
+
+        # Total and per-reaction counts - always on full unfiltered queryset
+        all_likes = Like.objects.filter(content_type=content_type, object_id=pk)
+        total_count = all_likes.count()
+        reaction_counts = {
+            r: all_likes.filter(reaction=r).count() for r in Like.Reaction.values
+        }
+
+        # Pagination
         offset = (page - 1) * page_size
         items = likes[offset : offset + page_size]
+        total_filtered = likes.count()
 
         logger.debug(
-            "Liker list | target=%s pk=%s total=%s",
+            "Reactor list | target=%s pk=%s total=%s filter=%s",
             target_type,
             pk,
-            total,
+            total_count,
+            reaction_filter or "all",
         )
 
         return APIResponse.success(
@@ -178,8 +257,10 @@ class LikerListView(APIView):
             meta={
                 "page": page,
                 "page_size": page_size,
-                "total": total,
-                "total_pages": -(-total // page_size),
+                "total": total_filtered,
+                "total_pages": -(-total_filtered // page_size),
+                "total_count": total_count,  # combined all reactions
+                "reaction_counts": reaction_counts,  # per-reaction breakdown
             },
         )
 
