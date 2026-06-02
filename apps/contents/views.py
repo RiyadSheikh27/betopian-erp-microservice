@@ -12,6 +12,10 @@ from apps.utils.throttles import UploadThrottle, FeedThrottle
 from django.contrib.contenttypes.models import ContentType
 from apps.interactions.models import Like
 
+from django.db.models import Subquery, CharField
+from django.db.models.functions import Coalesce
+from django.db.models import Value
+
 from apps.utils.response import APIResponse
 from .models import (
     Post,
@@ -38,6 +42,66 @@ logger = logging.getLogger("apps.contents")
 
 """ HELPER FUNCTIONS """
 
+def _user_reaction_subquery(content_type, user):
+    """
+    Returns the user's reaction string for each object.
+    Returns None if user has not reacted.
+    Used instead of boolean is_liked.
+    """
+    return Subquery(
+        Like.objects.filter(
+            content_type=content_type,
+            object_id=OuterRef("pk"),
+            user=user,
+        ).values("reaction")[:1],
+        output_field=CharField(),
+    )
+
+
+def _top_reacts_subquery(content_type):
+    """
+    Returns top 3 reaction types ordered by count descending.
+    Built in Python after fetching — Django ORM can't return
+    ordered arrays as a subquery cleanly.
+    Handled in _attach_top_reacts() instead.
+    """
+    pass  # see _attach_top_reacts below
+
+
+def _attach_top_reacts(items, content_type):
+    """
+    Attach top_reacts to a list of Post/Reel/PostMedia objects.
+    Fetches all reactions for all items in 1 query — no N+1.
+    Returns top 3 reaction types ordered by count desc per item.
+    """
+    from apps.interactions.models import Like
+    from django.db.models import Count
+
+    if not items:
+        return items
+
+    object_ids = [item.id for item in items]
+
+    # Single query - all reaction counts for all items
+    reaction_data = (
+        Like.objects
+        .filter(content_type=content_type, object_id__in=object_ids)
+        .values("object_id", "reaction")
+        .annotate(count=Count("id"))
+        .order_by("object_id", "-count")
+    )
+
+    # Group by object_id
+    from collections import defaultdict
+    react_map = defaultdict(list)
+    for row in reaction_data:
+        react_map[row["object_id"]].append(row["reaction"])
+
+    # Attach top 3 to each item
+    for item in items:
+        item.top_reacts = react_map.get(item.id, [])[:3]
+
+    return items
 
 def _encode_cursor(created_at, obj_id):
     raw = f"{created_at.isoformat()}__{obj_id}"
@@ -83,7 +147,7 @@ def _paginate_cursor(queryset, page_size):
 
 
 def _post_queryset(user=None):
-
+    
     qs = (
         Post.objects.select_related("author", "community")
         .prefetch_related(Prefetch("media", queryset=_annotated_media_qs(user)))
@@ -98,13 +162,7 @@ def _post_queryset(user=None):
     if user:
         post_ct = ContentType.objects.get_for_model(Post)
         qs = qs.annotate(
-            is_liked=Exists(
-                Like.objects.filter(
-                    content_type=post_ct,
-                    object_id=OuterRef("pk"),
-                    user=user,
-                )
-            ),
+            user_reaction=_user_reaction_subquery(post_ct, user), 
             is_saved=Exists(                           
                 SavedItem.objects.filter(                  
                     content_type=post_ct,                     
@@ -130,13 +188,7 @@ def _reel_queryset(user=None):
     if user:
         reel_ct = ContentType.objects.get_for_model(Reel)
         qs = qs.annotate(
-            is_liked=Exists(
-                Like.objects.filter(
-                    content_type=reel_ct,
-                    object_id=OuterRef("pk"),
-                    user=user,
-                )
-            ),
+            user_reaction=_user_reaction_subquery(reel_ct, user), 
             is_saved=Exists(                                      
                 SavedItem.objects.filter(                            
                     content_type=reel_ct,                           
@@ -167,13 +219,7 @@ def _annotated_media_qs(user=None):
     if user:
         media_ct = ContentType.objects.get_for_model(PostMedia)
         qs = qs.annotate(
-            is_liked=Exists(
-                Like.objects.filter(
-                    content_type=media_ct,
-                    object_id=OuterRef("pk"),
-                    user=user,
-                )
-            )
+            user_reaction=_user_reaction_subquery(media_ct, user)
         )
     return qs
 
@@ -198,6 +244,7 @@ def _get_community(community_id, user):
     if not CommunityMember.objects.filter(community=community, user=user).exists():
         return None, "You are not a member of this community."
     return community, None
+
 
 
 """ POST SECTION VIEWS"""
@@ -694,7 +741,6 @@ class SavedItemListView(APIView):
         elif filter_type == "reel":
             # Filter returns both direct reels AND post videos together
             qs = qs.filter(content_type__in=[reel_ct, post_media_ct])
-        # No filter — return everything
 
         # Cursor pagination
         cursor_str = request.query_params.get("cursor")

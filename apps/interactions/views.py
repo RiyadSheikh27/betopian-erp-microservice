@@ -1,5 +1,6 @@
 import base64
 import logging
+from django.db.models import Count as DCount
 
 from django.contrib.contenttypes.models import ContentType
 from rest_framework.views import APIView
@@ -159,14 +160,13 @@ class LikeToggleView(APIView):
         ).count()
 
         # Per-reaction breakdown
-        reaction_counts = {
-            r: Like.objects.filter(
-                content_type=content_type,
-                object_id=pk,
-                reaction=r,
-            ).count()
-            for r in Like.Reaction.values
-        }
+        reaction_counts = dict(
+            Like.objects.filter(content_type=content_type, object_id=pk)
+            .values("reaction")
+            .annotate(count=DCount("id"))
+            .values_list("reaction", "count")
+        )
+        reaction_counts = {r: reaction_counts.get(r, 0) for r in Like.Reaction.values}
 
         logger.info(
             "Reaction toggled | user_id=%s target=%s pk=%s reaction=%s reacted=%s",

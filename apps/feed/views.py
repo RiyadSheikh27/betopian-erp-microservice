@@ -12,6 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from apps.utils.response import APIResponse
 from apps.contents.models import Post, PostMedia, Reel, CommunityMember, SavedItem
 from apps.interactions.models import Like
+from apps.contents.views import _attach_top_reacts, _user_reaction_subquery
 
 from .serializers import NFFeedPostSerializer, NFFeedReelSerializer
 
@@ -27,13 +28,7 @@ def _annotated_media_qs(user=None):
     if user:
         media_ct = ContentType.objects.get_for_model(PostMedia)
         qs = qs.annotate(
-            is_liked=Exists(
-                Like.objects.filter(
-                    content_type=media_ct,
-                    object_id=OuterRef("pk"),
-                    user=user,
-                )
-            )
+            user_reaction=_user_reaction_subquery(media_ct, user),
         )
     return qs
 
@@ -85,13 +80,7 @@ class PostNewsFeedView(APIView):
                 media_count=Count("media", distinct=True),
                 like_count=Count("likes", distinct=True),
                 comment_count=Count("comments", distinct=True),
-                is_liked=Exists(
-                    Like.objects.filter(
-                        content_type=post_ct,
-                        object_id=OuterRef("pk"),
-                        user=request.user,
-                    )
-                ),
+                user_reaction=_user_reaction_subquery(post_ct, request.user),
                 is_saved=Exists(
                     SavedItem.objects.filter(
                         content_type=post_ct,
@@ -125,6 +114,15 @@ class PostNewsFeedView(APIView):
         has_more = len(items) > page_size
         if has_more:
             items = items[:page_size]
+
+        items = _attach_top_reacts(items, post_ct)
+
+        # Attach top_reacts to media items
+        media_ct = ContentType.objects.get_for_model(PostMedia)
+        all_media = []
+        for post in items:
+            all_media.extend(post.media.all())
+        _attach_top_reacts(all_media, media_ct)
 
         next_cursor = (
             _encode_cursor(items[-1].created_at, items[-1].id) if has_more else None
@@ -179,13 +177,7 @@ class ReelNewsFeedView(APIView):
             .annotate(
                 like_count=Count("likes", distinct=True),
                 comment_count=Count("comments", distinct=True),
-                is_liked=Exists(
-                    Like.objects.filter(
-                        content_type=reel_ct,
-                        object_id=OuterRef("pk"),
-                        user=request.user,
-                    )
-                ),
+                user_reaction=_user_reaction_subquery(reel_ct, request.user),
                 is_saved=Exists(
                     SavedItem.objects.filter(
                         content_type=reel_ct,
@@ -221,13 +213,7 @@ class ReelNewsFeedView(APIView):
             .annotate(
                 like_count=Count("likes", distinct=True),
                 comment_count=Count("comments", distinct=True),
-                is_liked=Exists(
-                    Like.objects.filter(
-                        content_type=media_ct,
-                        object_id=OuterRef("pk"),
-                        user=request.user,
-                    )
-                ),
+                user_reaction=_user_reaction_subquery(media_ct, request.user),
                 is_saved=Exists(
                     SavedItem.objects.filter(
                         content_type=media_ct,
@@ -248,6 +234,10 @@ class ReelNewsFeedView(APIView):
             )
         post_videos = list(post_video_qs[:fetch_limit])
 
+        # Attach top_reacts to both lists
+        direct_reels = _attach_top_reacts(direct_reels, reel_ct)
+        post_videos = _attach_top_reacts(post_videos, media_ct)
+
         # Normalise into unified dict
         unified = []
 
@@ -262,7 +252,8 @@ class ReelNewsFeedView(APIView):
                     "privacy": r.privacy,
                     "like_count": r.like_count,
                     "comment_count": r.comment_count,
-                    "is_liked": r.is_liked,
+                    "user_reaction": getattr(r, "user_reaction", None),
+                    "top_reacts": getattr(r, "top_reacts", []),
                     "is_saved": r.is_saved,
                     "view_count": r.view_count,
                     "created_at": r.created_at,
@@ -280,7 +271,8 @@ class ReelNewsFeedView(APIView):
                     "privacy": pm.post.privacy,
                     "like_count": pm.like_count,
                     "comment_count": pm.comment_count,
-                    "is_liked": pm.is_liked,
+                    "user_reaction": getattr(pm, "user_reaction", None),
+                    "top_reacts": getattr(pm, "top_reacts", []),
                     "is_saved": pm.is_saved,
                     "view_count": pm.view_count,
                     "created_at": pm.created_at,
@@ -346,13 +338,7 @@ class CommunityPostFeedView(APIView):
                 media_count=Count("media", distinct=True),
                 like_count=Count("likes", distinct=True),
                 comment_count=Count("comments", distinct=True),
-                is_liked=Exists(
-                    Like.objects.filter(
-                        content_type=post_ct,
-                        object_id=OuterRef("pk"),
-                        user=request.user,
-                    )
-                ),
+                user_reaction=_user_reaction_subquery(post_ct, request.user),
             )
         )
         if search:
@@ -381,6 +367,8 @@ class CommunityPostFeedView(APIView):
         has_more = len(items) > page_size
         if has_more:
             items = items[:page_size]
+
+        items = _attach_top_reacts(items, post_ct)
 
         next_cursor = (
             _encode_cursor(items[-1].created_at, items[-1].id) if has_more else None

@@ -10,7 +10,8 @@ class NFFeedPostMediaSerializer(serializers.Serializer):
     order = serializers.IntegerField()
     like_count = serializers.IntegerField(default=0)
     comment_count = serializers.IntegerField(default=0)
-    is_liked = serializers.BooleanField(default=False)
+    user_reaction = serializers.CharField(default=None, allow_null=True)
+    top_reacts    = serializers.ListField(child=serializers.CharField(), default=list) 
 
     def get_url(self, obj):
         request = self.context.get("request")
@@ -27,8 +28,8 @@ class NFFeedPostSerializer(serializers.Serializer):
     media_count = serializers.IntegerField()
     like_count = serializers.IntegerField(default=0)
     comment_count = serializers.IntegerField(default=0)
-    is_liked = serializers.BooleanField(default=False)
-    is_saved = serializers.BooleanField(default=False)
+    user_reaction = serializers.CharField(default=None, allow_null=True)
+    top_reacts = serializers.ListField(child=serializers.CharField(), default=list)
     community = CommunitySerializer(read_only=True)
     created_at = serializers.DateTimeField()
     updated_at = serializers.DateTimeField()
@@ -49,8 +50,8 @@ class NFFeedReelSerializer(serializers.Serializer):
     view_count = serializers.IntegerField()
     like_count = serializers.IntegerField(default=0)
     comment_count = serializers.IntegerField(default=0)
-    is_liked = serializers.BooleanField(default=False)
-    is_saved = serializers.BooleanField(default=False)
+    user_reaction = serializers.CharField(default=None, allow_null=True)
+    top_reacts = serializers.ListField(child=serializers.CharField(), default=list)
     created_at = serializers.DateTimeField()
 
     def get_video_url(self, obj):
@@ -71,7 +72,8 @@ class NFFeedCommunitySerializer(serializers.Serializer):
     view_count = serializers.IntegerField()
     like_count = serializers.IntegerField(default=0)
     comment_count = serializers.IntegerField(default=0)
-    is_liked = serializers.BooleanField(default=False)
+    user_reaction = serializers.CharField(default=None, allow_null=True)
+    top_reacts = serializers.ListField(child=serializers.CharField(), default=list)
     created_at = serializers.DateTimeField()
 
     def get_video_url(self, obj):
