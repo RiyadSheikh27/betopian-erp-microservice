@@ -66,7 +66,8 @@ class PostMediaSerializer(serializers.ModelSerializer):
 
     url = serializers.SerializerMethodField()
     likes_count = serializers.IntegerField(read_only=True, default=0)
-    is_liked = serializers.BooleanField(read_only=True, default=False)
+    user_reaction = serializers.CharField(read_only=True, default=None, allow_null=True)
+    top_reacts    = serializers.ListField(child=serializers.CharField(), read_only=True, default=list)
     comment_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
@@ -95,8 +96,9 @@ class PostSerializer(serializers.ModelSerializer):
     media_count = serializers.IntegerField(read_only=True)
     like_count = serializers.IntegerField(read_only=True, default=0)
     comment_count = serializers.IntegerField(read_only=True, default=0)
-    is_liked = serializers.BooleanField(read_only=True, default=False)
-    is_saved = serializers.BooleanField(read_only=True, default=False)  # ADD
+    user_reaction = serializers.CharField(read_only=True, default=None, allow_null=True)
+    top_reacts    = serializers.ListField(child=serializers.CharField(), read_only=True, default=list)
+    is_saved = serializers.BooleanField(read_only=True, default=False)
 
     class Meta:
         model = Post
@@ -131,7 +133,7 @@ class PostDetailSerializer(serializers.ModelSerializer):
     media_count = serializers.IntegerField(read_only=True)
     like_count = serializers.IntegerField(read_only=True, default=0)
     comment_count = serializers.IntegerField(read_only=True, default=0)
-    user_reaction = serializers.CharField(read_only=True, default=None)
+    user_reaction = serializers.CharField(read_only=True, default=None, allow_null=True)
     top_reacts = serializers.ListField(read_only=True, default=list)
 
     class Meta:

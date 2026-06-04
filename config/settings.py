@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "apps.interactions",
     "apps.mom",
     "apps.ebook",
+    "apps.chat",
 ]
 
 MIDDLEWARE = [
@@ -77,25 +78,25 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 """ Local Database - SQLite """
 
-# DATABASES = {
-#     "default": {
-#         "ENGINE": "django.db.backends.sqlite3",
-#         "NAME": BASE_DIR / "db.sqlite3",
-#     }
-# }
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
+    }
+}
 
 """ Production Database - PostgreSQL """
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'betopian_db',
-        'USER': 'betopian_user',
-        'PASSWORD': 'betopian@123',
-        'HOST': 'localhost',
-        'PORT': '5432',
-    }
-}
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'betopian_db',
+#         'USER': 'betopian_user',
+#         'PASSWORD': 'betopian@123',
+#         'HOST': 'localhost',
+#         'PORT': '5432',
+#     }
+# }
 
 
 """ Password validation """
@@ -185,6 +186,12 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = VIDEO_UPLOAD_MAX_SIZE
 IMAGE_COMPRESSION_QUALITY = config("IMAGE_COMPRESSION_QUALITY", default=85, cast=int)
 IMAGE_MAX_DIMENSION = config("IMAGE_MAX_DIMENSION", default=1920, cast=int)  # max width or height px
 AVATAR_MAX_DIMENSION = config("AVATAR_MAX_DIMENSION", default=400,  cast=int)
+
+""" Message Media Size Limits """
+
+DOC_MAX_SIZE = config("DOC_MAX_SIZE", default=50 * 1024 * 1024, cast=int)  # 50 MB
+IMAGE_MAX_SIZE = config("IMAGE_MAX_SIZE", default=10 * 1024 * 1024, cast=int)  # 10 MB
+VIDEO_MAX_SIZE = config("VIDEO_MAX_SIZE", default=200 * 1024 * 1024, cast=int)  # 200 MB
 
 """ Gunicorn — recommended settings for production (used in gunicorn.conf.py) """
 
