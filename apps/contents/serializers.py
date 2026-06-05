@@ -47,7 +47,6 @@ class CommunitySerializer(serializers.ModelSerializer):
     member_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
-
         model = Community
         fields = ("id", "name", "description", "cover_image", "member_count", "type")
 
@@ -128,7 +127,7 @@ class PostDetailSerializer(serializers.ModelSerializer):
     """
 
     author = PostAuthorSerializer(read_only=True)
-    community = CommunitySerializer(read_only=True)  # NEW
+    community = CommunitySerializer(read_only=True)
     media = PostMediaSerializer(many=True, read_only=True)
     media_count = serializers.IntegerField(read_only=True)
     like_count = serializers.IntegerField(read_only=True, default=0)
@@ -192,7 +191,6 @@ class PostCreateSerializer(serializers.ModelSerializer):
             processed_files = []
             for file in files:
                 media_type, _ = _resolve_media_type(file)
-                # Compress images — pass videos through unchanged
                 if media_type == PostMedia.MediaType.IMAGE:
                     file = compress_image(file)
                 processed_files.append(file)
@@ -276,7 +274,6 @@ class PostUpdateSerializer(serializers.ModelSerializer):
         if remove_ids:
             instance.media.filter(id__in=remove_ids).delete()
 
-        # Update captions on existing media — positional pairs
         if edit_media_ids:
             media_map = {m.id: m for m in instance.media.filter(id__in=edit_media_ids)}
             to_update = []
@@ -290,7 +287,6 @@ class PostUpdateSerializer(serializers.ModelSerializer):
             if to_update:
                 PostMedia.objects.bulk_update(to_update, ["caption"])
 
-        # Append new media - order continues after current max
         if add_files:
             current_max = (
                 instance.media.aggregate(max_order=models.Max("order"))["max_order"]
@@ -327,7 +323,8 @@ class ReelSerializer(serializers.ModelSerializer):
     video_url = serializers.SerializerMethodField()
     like_count = serializers.IntegerField(read_only=True, default=0)
     comment_count = serializers.IntegerField(read_only=True, default=0)
-    is_liked = serializers.BooleanField(read_only=True, default=False)
+    user_reaction = serializers.CharField(read_only=True, default=None, allow_null=True)
+    top_reacts = serializers.ListField(child=serializers.CharField(), read_only=True, default=list)
     is_saved = serializers.BooleanField(read_only=True, default=False)
 
     class Meta:
@@ -341,8 +338,8 @@ class ReelSerializer(serializers.ModelSerializer):
             "view_count",
             "like_count",
             "comment_count",
-            "user_reaction",
-            "top_reacts",
+            "user_reaction",   
+            "top_reacts",   
             "is_saved",
             "is_edited",
             "created_at",
