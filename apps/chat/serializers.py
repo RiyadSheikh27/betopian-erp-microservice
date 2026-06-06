@@ -7,6 +7,7 @@ from .models import (
     Message,
     MessageMedia,
     MessageReaction,
+    MessageStatus,
 )
 
 DOC_TYPES = {
@@ -16,7 +17,6 @@ DOC_TYPES = {
     "application/vnd.ms-excel",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 }
-
 IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
 VIDEO_TYPES = {"video/mp4", "video/quicktime", "video/x-msvideo", "video/webm"}
 
@@ -38,7 +38,9 @@ def _resolve_media_type(file):
     return None, mime
 
 
-class ParticipantSerializer(serializers.ModelSerializer):
+class ConversationParticipantSerializer(serializers.Serializer):
+    """Used in group info - full participant list."""
+
     id = serializers.UUIDField()
     name = serializers.CharField()
     avatar_url = serializers.URLField(allow_null=True)
@@ -51,15 +53,16 @@ class LastMessageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Message
-        fields = ["id", "sender_name", "type", "body", "created_at"]
+        fields = ("id", "sender_name", "type", "body", "created_at")
 
 
 class ConversationSerializer(serializers.ModelSerializer):
-    other_user = serializers.SerializerMethodField() # DM only
-    group_name = serializers.SerializerMethodField() # Group only
+    other_user = serializers.SerializerMethodField()
+    group_name = serializers.SerializerMethodField()
+    group_avatar = serializers.SerializerMethodField()
     last_message = LastMessageSerializer(read_only=True)
     unread_count = serializers.IntegerField(read_only=True, default=0)
-    participants_count = serializers.IntegerField(read_only=True, default=0)
+    participant_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = Conversation
@@ -68,17 +71,20 @@ class ConversationSerializer(serializers.ModelSerializer):
             "type",
             "other_user",
             "group_name",
+            "group_avatar",
             "last_message",
             "unread_count",
             "participant_count",
             "last_activity",
         )
-        
+
     def get_other_user(self, obj):
         if obj.type != Conversation.ConversationType.DM:
             return None
         request = self.context["request"]
-        other = obj.participants.exclude(user=request.user).select_related("user").first()
+        other = (
+            obj.participants.exclude(user=request.user).select_related("user").first()
+        )
         if not other:
             return None
         return {
@@ -88,13 +94,21 @@ class ConversationSerializer(serializers.ModelSerializer):
             "is_online": other.is_online,
             "last_seen": other.last_seen,
         }
-        
+
     def get_group_name(self, obj):
         if obj.type != Conversation.ConversationType.GROUP:
             return None
         return obj.community.name if obj.community else None
-    
-    
+
+    def get_group_avatar(self, obj):
+        if obj.type != Conversation.ConversationType.GROUP:
+            return None
+        request = self.context.get("request")
+        if obj.community and obj.community.cover_image and request:
+            return request.build_absolute_uri(obj.community.cover_image.url)
+        return None
+
+
 class MessageMediaSerializer(serializers.ModelSerializer):
     url = serializers.SerializerMethodField()
 
@@ -108,12 +122,26 @@ class MessageMediaSerializer(serializers.ModelSerializer):
 
 
 class ReplySnippetSerializer(serializers.ModelSerializer):
-    """Minimal reply preview — avoids deep nesting."""
+    """Minimal reply preview - no deep nesting."""
+
     sender_name = serializers.CharField(source="sender.name")
 
     class Meta:
         model = Message
         fields = ("id", "sender_name", "type", "body")
+
+
+class MessageReactionDetailSerializer(serializers.ModelSerializer):
+    """Single reactor - used in reaction list view."""
+
+    user_id = serializers.UUIDField(source="user.id")
+    name = serializers.CharField(source="user.name")
+    avatar_url = serializers.URLField(source="user.avatar_url", allow_null=True)
+    reaction = serializers.CharField()
+
+    class Meta:
+        model = MessageReaction
+        fields = ("user_id", "name", "avatar_url", "reaction")
 
 
 class MessageSerializer(serializers.ModelSerializer):
@@ -127,9 +155,19 @@ class MessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
         fields = (
-            "id", "sender", "type", "body", "reply_to",
-            "media", "reactions", "read_by_count",
-            "is_edited", "is_deleted", "is_mine", "created_at", "updated_at",
+            "id",
+            "sender",
+            "type",
+            "body",
+            "reply_to",
+            "media",
+            "reactions",
+            "read_by_count",
+            "is_edited",
+            "is_deleted",
+            "is_mine",
+            "created_at",
+            "updated_at",
         )
 
     def get_sender(self, obj):
@@ -144,8 +182,9 @@ class MessageSerializer(serializers.ModelSerializer):
         return request and obj.sender_id == request.user.id
 
     def get_reactions(self, obj):
-        # Group reactions by type — {love: 2, haha: 1}
+        """Returns summary: {love: 2, haha: 1} - detail list via separate endpoint."""
         from django.db.models import Count
+
         qs = obj.reactions.values("reaction").annotate(count=Count("id"))
         return {r["reaction"]: r["count"] for r in qs}
 

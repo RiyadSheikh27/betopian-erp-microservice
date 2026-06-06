@@ -28,7 +28,8 @@ from apps.mom.views import (
     NotesTabView,
 )
 from apps.ebook.views import EbookTitleListView, EbookListView
-
+from apps.chat.views import ConversationListView, ConversationParticipantsView, UserSearchView
+    
 utils_urlpatterns = [
     path("upload-profile-image/", ProfileImageUploadView.as_view(), name="upload-profile-image"),
 ]
@@ -97,10 +98,15 @@ mom_urlpatterns = [
     path("notes-tab/", NotesTabView.as_view(), name="mom-notes-tab"),
 ]
 
-
 ebook_urlpatterns = [
     path("ebook-titles/", EbookTitleListView.as_view(), name="ebook-title-list"),
     path("ebooks/", EbookListView.as_view(), name="ebook-list"),
+]
+
+chat_urlpatterns = [
+    path("chat/conversations/", ConversationListView.as_view(), name="conversation-list"),
+    path("chat/conversations/<uuid:conv_id>/participants/", ConversationParticipantsView.as_view(), name="conversation-participants"),
+    path("chat/users/search/", UserSearchView.as_view(), name="user-search"),
 ]
  
 urlpatterns = [
@@ -111,4 +117,5 @@ urlpatterns = [
     *utils_urlpatterns,
     *mom_urlpatterns,
     *ebook_urlpatterns,
+    *chat_urlpatterns,
 ]

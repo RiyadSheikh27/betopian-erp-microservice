@@ -22,7 +22,6 @@ class Conversation(TimeStampedModel):
         on_delete=models.CASCADE,
         related_name="conversation",
     )
-    # last_message denormalized for fast chat list ordering
     last_message = models.ForeignKey(
         "Message",
         null=True,
@@ -46,7 +45,6 @@ class ConversationParticipant(TimeStampedModel):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="conversations"
     )
-    # last message the user has read
     last_read_message = models.ForeignKey(
         "Message", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
     )
@@ -108,7 +106,7 @@ class MessageMedia(TimeStampedModel):
     file = models.FileField(upload_to="chat_media/%Y/%m/%d/")
     media_type = models.CharField(max_length=10, choices=MediaType.choices)
     file_name = models.CharField(max_length=255, blank=True)
-    file_size = models.PositiveBigIntegerField(default=0)  # bytes
+    file_size = models.PositiveBigIntegerField(default=0)
     order = models.PositiveSmallIntegerField(default=0)
 
     class Meta(TimeStampedModel.Meta):
@@ -117,7 +115,7 @@ class MessageMedia(TimeStampedModel):
 
 
 class MessageReaction(TimeStampedModel):
-    """One reaction per user per message (same reactions as post likes)."""
+    """One reaction per user per message."""
 
     class Reaction(models.TextChoices):
         LOVE = "love", "Love"
@@ -150,7 +148,7 @@ class MessageReaction(TimeStampedModel):
 
 
 class MessageStatus(TimeStampedModel):
-    """Per-recipient delivery + read status for DM and group."""
+    """Per-recipient delivery + read status."""
 
     message = models.ForeignKey(
         Message, on_delete=models.CASCADE, related_name="statuses"
