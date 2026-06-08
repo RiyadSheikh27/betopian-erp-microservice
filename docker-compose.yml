@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:16-alpine
+    env_file:
+      - .env.production
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend-drf
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend-drf/.env.docker
+    depends_on:
+      - db
+    volumes:
+      - ./backend-drf/static:/app/static
+      - ./backend-drf/media:/app/media
+    command: >
+      sh -c "
+      python manage.py collectstatic --noinput &&
+      python manage.py migrate &&
+      daphne -b 0.0.0.0 -p 8000 config.asgi:application
+      "
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_SERVER_BASE_URL: "http://backend:8000/api/v1"
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

@@ -42,6 +42,7 @@ logger = logging.getLogger("apps.contents")
 
 """ HELPER FUNCTIONS """
 
+
 def _user_reaction_subquery(content_type, user):
     """
     Returns the user's reaction string for each object.
@@ -61,7 +62,7 @@ def _user_reaction_subquery(content_type, user):
 def _top_reacts_subquery(content_type):
     """
     Returns top 3 reaction types ordered by count descending.
-    Built in Python after fetching — Django ORM can't return
+    Built in Python after fetching - Django ORM can't return
     ordered arrays as a subquery cleanly.
     Handled in _attach_top_reacts() instead.
     """
@@ -71,7 +72,7 @@ def _top_reacts_subquery(content_type):
 def _attach_top_reacts(items, content_type):
     """
     Attach top_reacts to a list of Post/Reel/PostMedia objects.
-    Fetches all reactions for all items in 1 query — no N+1.
+    Fetches all reactions for all items in 1 query - no N+1.
     Returns top 3 reaction types ordered by count desc per item.
     """
     from apps.interactions.models import Like
@@ -84,8 +85,7 @@ def _attach_top_reacts(items, content_type):
 
     # Single query - all reaction counts for all items
     reaction_data = (
-        Like.objects
-        .filter(content_type=content_type, object_id__in=object_ids)
+        Like.objects.filter(content_type=content_type, object_id__in=object_ids)
         .values("object_id", "reaction")
         .annotate(count=Count("id"))
         .order_by("object_id", "-count")
@@ -93,6 +93,7 @@ def _attach_top_reacts(items, content_type):
 
     # Group by object_id
     from collections import defaultdict
+
     react_map = defaultdict(list)
     for row in reaction_data:
         react_map[row["object_id"]].append(row["reaction"])
@@ -102,6 +103,7 @@ def _attach_top_reacts(items, content_type):
         item.top_reacts = react_map.get(item.id, [])[:3]
 
     return items
+
 
 def _encode_cursor(created_at, obj_id):
     raw = f"{created_at.isoformat()}__{obj_id}"
@@ -147,7 +149,7 @@ def _paginate_cursor(queryset, page_size):
 
 
 def _post_queryset(user=None):
-    
+
     qs = (
         Post.objects.select_related("author", "community")
         .prefetch_related(Prefetch("media", queryset=_annotated_media_qs(user)))
@@ -162,14 +164,14 @@ def _post_queryset(user=None):
     if user:
         post_ct = ContentType.objects.get_for_model(Post)
         qs = qs.annotate(
-            user_reaction=_user_reaction_subquery(post_ct, user), 
-            is_saved=Exists(                           
-                SavedItem.objects.filter(                  
-                    content_type=post_ct,                     
-                    object_id=OuterRef("pk"),                  
-                    user=user,                                
-                )                                         
-            ),                                          
+            user_reaction=_user_reaction_subquery(post_ct, user),
+            is_saved=Exists(
+                SavedItem.objects.filter(
+                    content_type=post_ct,
+                    object_id=OuterRef("pk"),
+                    user=user,
+                )
+            ),
         )
     return qs
 
@@ -188,14 +190,14 @@ def _reel_queryset(user=None):
     if user:
         reel_ct = ContentType.objects.get_for_model(Reel)
         qs = qs.annotate(
-            user_reaction=_user_reaction_subquery(reel_ct, user), 
-            is_saved=Exists(                                      
-                SavedItem.objects.filter(                            
-                    content_type=reel_ct,                           
-                    object_id=OuterRef("pk"),                     
-                    user=user,                                    
-                )                                             
-            )                                                      
+            user_reaction=_user_reaction_subquery(reel_ct, user),
+            is_saved=Exists(
+                SavedItem.objects.filter(
+                    content_type=reel_ct,
+                    object_id=OuterRef("pk"),
+                    user=user,
+                )
+            ),
         )
     return qs
 
@@ -218,9 +220,7 @@ def _annotated_media_qs(user=None):
 
     if user:
         media_ct = ContentType.objects.get_for_model(PostMedia)
-        qs = qs.annotate(
-            user_reaction=_user_reaction_subquery(media_ct, user)
-        )
+        qs = qs.annotate(user_reaction=_user_reaction_subquery(media_ct, user))
     return qs
 
 
@@ -244,7 +244,6 @@ def _get_community(community_id, user):
     if not CommunityMember.objects.filter(community=community, user=user).exists():
         return None, "You are not a member of this community."
     return community, None
-
 
 
 """ POST SECTION VIEWS"""
@@ -552,7 +551,7 @@ class ReelViewCountView(APIView):
         )
 
         if reel_view.view_count >= max_views:
-            # User has already hit the limit — return silently
+            # User has already hit the limit - return silently
             logger.debug(
                 "View limit reached | source=%s id=%s user_id=%s count=%s max=%s",
                 source,
@@ -708,7 +707,7 @@ class SaveToggleView(APIView):
 class SavedItemListView(APIView):
     """
     Returns paginated list of the user's saved items.
-    Cursor-based pagination — newest saved first.
+    Cursor-based pagination - newest saved first.
     """
 
     permission_classes = [IsAuthenticated]
@@ -774,7 +773,7 @@ class SavedItemListView(APIView):
             i.object_id for i in items if i.content_type_id == post_media_ct.id
         ]
 
-        # Fetch actual objects in bulk — no N+1
+        # Fetch actual objects in bulk - no N+1
         posts = (
             {p.id: p for p in _post_queryset(request.user).filter(id__in=post_ids)}
             if post_ids
@@ -817,49 +816,59 @@ class SavedItemListView(APIView):
         result = []
         for item in items:
             ct_id = item.content_type_id
-            oid   = item.object_id
-        
+            oid = item.object_id
+
             if ct_id == post_ct.id and oid in posts:
                 post = posts[oid]
-                result.append({
-                    "type":     "post",
-                    "saved_at": item.created_at,
-                    "data":     NFFeedPostSerializer(post, context={"request": request}).data,
-                })
-        
+                result.append(
+                    {
+                        "type": "post",
+                        "saved_at": item.created_at,
+                        "data": NFFeedPostSerializer(
+                            post, context={"request": request}
+                        ).data,
+                    }
+                )
+
             elif ct_id == reel_ct.id and oid in reels:
                 reel = reels[oid]
-                result.append({
-                    "type":     "reel",      # direct reel
-                    "source":   "direct",
-                    "saved_at": item.created_at,
-                    "data":     ReelSerializer(reel, context={"request": request}).data,
-                })
-        
+                result.append(
+                    {
+                        "type": "reel",  # direct reel
+                        "source": "direct",
+                        "saved_at": item.created_at,
+                        "data": ReelSerializer(reel, context={"request": request}).data,
+                    }
+                )
+
             elif ct_id == post_media_ct.id and oid in post_videos:
                 pm = post_videos[oid]
-                result.append({
-                    "type":     "reel",      # post video — same type as direct reel
-                    "source":   "post",      # Flutter uses source to differentiate if needed
-                    "saved_at": item.created_at,
-                    "data": {
-                        "id":            pm.id,
-                        "source":        "post",
-                        "author": {
-                            "id":         pm.post.author.id,
-                            "central_id": pm.post.author.central_id,
-                            "name":       pm.post.author.name,
-                            "avatar_url": pm.post.author.avatar_url,
+                result.append(
+                    {
+                        "type": "reel",  # post video - same type as direct reel
+                        "source": "post",  # Flutter uses source to differentiate if needed
+                        "saved_at": item.created_at,
+                        "data": {
+                            "id": pm.id,
+                            "source": "post",
+                            "author": {
+                                "id": pm.post.author.id,
+                                "central_id": pm.post.author.central_id,
+                                "name": pm.post.author.name,
+                                "avatar_url": pm.post.author.avatar_url,
+                            },
+                            "caption": pm.caption,
+                            "video_url": request.build_absolute_uri(pm.file.url),
+                            "like_count": pm.like_count,
+                            "comment_count": pm.comment_count,
+                            "is_liked": pm.is_liked,
+                            "view_count": pm.view_count,
+                            "community": (
+                                pm.post.community.name if pm.post.community else None
+                            ),
                         },
-                        "caption":       pm.caption,
-                        "video_url":     request.build_absolute_uri(pm.file.url),
-                        "like_count":    pm.like_count,
-                        "comment_count": pm.comment_count,
-                        "is_liked":      pm.is_liked,
-                        "view_count":    pm.view_count,
-                        "community":     pm.post.community.name if pm.post.community else None,
-                    },
-                })
+                    }
+                )
         logger.debug(
             "Saved list | user_id=%s page_size=%s has_more=%s",
             request.user.pk,

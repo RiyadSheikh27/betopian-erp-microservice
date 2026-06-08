@@ -2,31 +2,31 @@
 
 
 :root {
-  /* ── Backgrounds — white/off-white, no dark ── */
+  /*  Backgrounds - white/off-white, no dark  */
   --bg-page:   #f5f5f5;     /* light grey page background */
   --bg-shell:  #ffffff;     /* pure white navbar/sidebar */
   --bg-card:   #ffffff;     /* pure white cards */
   --bg-lift:   #f8f8f8;     /* slightly lifted sections: headers, rows */
   --bg-well:   #f0f0f0;     /* inputs, recessed areas */
 
-  /* ── Borders — all light ── */
+  /*  Borders - all light  */
   --bdr:      rgba(0,0,0,0.08);
   --bdr-soft: rgba(0,0,0,0.04);
   --bdr-mid:  rgba(0,0,0,0.12);
   --bdr-hi:   rgba(0,0,0,0.18);
 
-  /* ── Text — dark/black on white ── */
+  /*  Text - dark/black on white  */
   --t1: #1a1a1a;   /* near-black, headings */
   --t2: #333333;   /* body text */
   --t3: #6c757d;   /* muted / secondary */
   --t4: #adb5bd;   /* very muted / disabled */
 
-  /* ── Accent: warm sage green ── */
+  /*  Accent: warm sage green  */
   --ac:     #5a9e7e;
   --ac-dim: rgba(90,158,126,0.10);
   --ac-hi:  #458f6e;
 
-  /* ── Semantic colours ── */
+  /*  Semantic colours  */
   --clr-green:   #3d8a5c;
   --clr-green-s: rgba(61,138,92,0.09);
   --clr-red:     #b55252;
@@ -36,17 +36,17 @@
   --clr-blue:    #4078a8;
   --clr-blue-s:  rgba(64,120,168,0.09);
 
-  /* ── Typography ── */
+  /*  Typography  */
   --f-ui:   'Inter', system-ui, -apple-system, sans-serif;
   --f-body: 'Lora', Georgia, serif;
 
-  /* ── Radius ── */
+  /*  Radius  */
   --r1: 4px;
   --r2: 7px;
   --r3: 10px;
   --r4: 14px;
 
-  /* ── Shadows — soft, never harsh ── */
+  /*  Shadows - soft, never harsh  */
   --shadow-xs: 0 1px 2px rgba(0,0,0,0.03), 0 1px 3px rgba(0,0,0,0.05);
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.04), 0 2px 6px rgba(0,0,0,0.04);
   --shadow-md: 0 2px 8px rgba(0,0,0,0.05), 0 4px 12px rgba(0,0,0,0.04);
@@ -202,7 +202,7 @@ h1, h2, h3, h4, h5, h6 {
 .dropdown-divider { border-color: var(--bdr) !important; }
 
 /* ══════════════════════════════════════════════════════════
-   SIDEBAR — Font color black (t1/t2)
+   SIDEBAR - Font color black (t1/t2)
    ══════════════════════════════════════════════════════════ */
 .main-sidebar,
 .sidebar-dark-primary,
@@ -343,11 +343,11 @@ h1, h2, h3, h4, h5, h6 {
    CONTENT WRAPPER
    ══════════════════════════════════════════════════════════ */
 /* ══════════════════════════════════════════════════════════
-   SIDEBAR — CLEAN WHITE + BLACK TEXT ONLY
+   SIDEBAR - CLEAN WHITE + BLACK TEXT ONLY
    ══════════════════════════════════════════════════════════ */
 
 /* ═════════════════════════════════════════════
-   FINAL SIDEBAR TEXT FIX — FORCE BLACK
+   FINAL SIDEBAR TEXT FIX - FORCE BLACK
    Put at VERY BOTTOM of CSS
    ═════════════════════════════════════════════ */
 
@@ -385,7 +385,7 @@ h1, h2, h3, h4, h5, h6 {
   border-left: 3px solid #5a9e7e !important;
 }
 
-/* icons (VERY IMPORTANT — AdminLTE overrides this separately) */
+/* icons (VERY IMPORTANT - AdminLTE overrides this separately) */
 .nav-sidebar .nav-icon {
   color: #000000 !important;
   opacity: 1 !important;
@@ -410,7 +410,7 @@ h1, h2, h3, h4, h5, h6 {
   color: #000000 !important;
 }
 /* ══════════════════════════════════════════════════════════
-   MODULE / APP CARDS — with shadow + extra padding
+   MODULE / APP CARDS - with shadow + extra padding
    ══════════════════════════════════════════════════════════ */
 .module {
   background: var(--bg-card) !important;
@@ -506,7 +506,7 @@ table caption,
 }
 
 /* ═══════════════════════════════════════
-   RECENT ACTIONS — TRUE INSET FIX (FINAL)
+   RECENT ACTIONS - TRUE INSET FIX (FINAL)
    ═══════════════════════════════════════ */
 
 /* force box to behave like a real card */
@@ -561,7 +561,7 @@ table caption,
   background: transparent !important;
 }
 /* ══════════════════════════════════════════════════════════
-   STAT CARDS — white background, shadows, extra padding
+   STAT CARDS - white background, shadows, extra padding
    ══════════════════════════════════════════════════════════ */
 .betopian-stat-grid {
   display: grid !important;
@@ -600,7 +600,7 @@ table caption,
 .betopian-stat .stat-down{ color: var(--clr-red)   !important; }
 
 /* ══════════════════════════════════════════════════════════
-   GENERIC CARDS — white background, shadows, extra padding
+   GENERIC CARDS - white background, shadows, extra padding
    ══════════════════════════════════════════════════════════ */
 .card {
   background: var(--bg-card) !important;
@@ -646,7 +646,7 @@ table caption,
 }
 
 /* ══════════════════════════════════════════════════════════
-   DATA TABLES — Proper column alignment, left aligned
+   DATA TABLES - Proper column alignment, left aligned
    ══════════════════════════════════════════════════════════ */
 .table {
   color: var(--t2) !important;
@@ -998,7 +998,7 @@ select[name="action"] {
   box-shadow: var(--shadow-xs) !important;
 }
 
-/* ── Scrollbar ── */
+/*  Scrollbar  */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--bdr-hi); border-radius: 10px; }

@@ -28,7 +28,14 @@ from apps.mom.views import (
     NotesTabView,
 )
 from apps.ebook.views import EbookTitleListView, EbookListView
-from apps.chat.views import ConversationListView, ConversationParticipantsView, UserSearchView
+from apps.chat.views import (
+    UserSearchView,
+    ConversationListView,
+    ConversationParticipantsView,
+    MessageListView,
+    MessageReactionListView,
+    ConversationMediaView,
+)
     
 utils_urlpatterns = [
     path("upload-profile-image/", ProfileImageUploadView.as_view(), name="upload-profile-image"),
@@ -103,10 +110,25 @@ ebook_urlpatterns = [
     path("ebooks/", EbookListView.as_view(), name="ebook-list"),
 ]
 
+
 chat_urlpatterns = [
-    path("chat/conversations/", ConversationListView.as_view(), name="conversation-list"),
-    path("chat/conversations/<uuid:conv_id>/participants/", ConversationParticipantsView.as_view(), name="conversation-participants"),
-    path("chat/users/search/", UserSearchView.as_view(), name="user-search"),
+    # User search (central ERP + local DB match)
+    path("conversations/user/search/", UserSearchView.as_view(), name="chat-user-search"),
+
+    # Conversation list + start DM
+    path("conversations/", ConversationListView.as_view(), name="chat-conv-list"),
+
+    # Participants list
+    path("conversations/<uuid:conv_id>/participants/", ConversationParticipantsView.as_view(), name="chat-conv-participants"),
+
+    # Message history + media upload
+    path("conversations/<uuid:conv_id>/messages/", MessageListView.as_view(), name="chat-messages"),
+
+    # Reaction list (who reacted with what)
+    path("conversations/<uuid:conv_id>/messages/<uuid:msg_id>/reactions/", MessageReactionListView.as_view(), name="chat-reactions"),
+
+    # Shared media gallery
+    path("conversations/<uuid:conv_id>/media/", ConversationMediaView.as_view(), name="chat-media"),
 ]
  
 urlpatterns = [

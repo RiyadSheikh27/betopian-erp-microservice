@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     "drf_spectacular",
+    "channels",
     # Local apps
     "apps.apis",
     "apps.utils",
@@ -45,6 +46,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -74,29 +76,36 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "config.wsgi.application"
+ASGI_APPLICATION = "config.asgi.application"
 
-
-""" Local Database - SQLite """
-
-DATABASES = {
+CHANNEL_LAYERS = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {"hosts": [config("REDIS_URL", default="redis://127.0.0.1:6379/0")]},
     }
 }
 
-""" Production Database - PostgreSQL """
+""" Local Database - SQLite """
 
 # DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': 'betopian_db',
-#         'USER': 'betopian_user',
-#         'PASSWORD': 'betopian@123',
-#         'HOST': 'localhost',
-#         'PORT': '5432',
+#     "default": {
+#         "ENGINE": "django.db.backends.sqlite3",
+#         "NAME": BASE_DIR / "db.sqlite3",
 #     }
 # }
+
+""" Production Database - PostgreSQL """
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'betopian_db',
+        'USER': 'betopian_user',
+        'PASSWORD': 'betopian@123',
+        'HOST': 'localhost',
+        'PORT': '5432',
+    }
+}
 
 
 """ Password validation """
@@ -135,10 +144,12 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+
 """ Default primary key field type """
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AUTH_USER_MODEL = "authentication.User"
+
 
 """ Rest Framework """
 
@@ -169,6 +180,7 @@ REST_FRAMEWORK = {
     },
 }
 
+
 """ Max file size - 50 MB """
 
 IMAGE_UPLOAD_MAX_SIZE_MB = config("IMAGE_UPLOAD_MAX_SIZE_MB", default=10, cast=int)
@@ -184,8 +196,10 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = VIDEO_UPLOAD_MAX_SIZE
 """ Image Compression - Pillow settings """
 
 IMAGE_COMPRESSION_QUALITY = config("IMAGE_COMPRESSION_QUALITY", default=85, cast=int)
-IMAGE_MAX_DIMENSION = config("IMAGE_MAX_DIMENSION", default=1920, cast=int)  # max width or height px
-AVATAR_MAX_DIMENSION = config("AVATAR_MAX_DIMENSION", default=400,  cast=int)
+IMAGE_MAX_DIMENSION = config(
+    "IMAGE_MAX_DIMENSION", default=1920, cast=int
+)  # max width or height px
+AVATAR_MAX_DIMENSION = config("AVATAR_MAX_DIMENSION", default=400, cast=int)
 
 """ Message Media Size Limits """
 
@@ -193,7 +207,8 @@ DOC_MAX_SIZE = config("DOC_MAX_SIZE", default=50 * 1024 * 1024, cast=int)  # 50 
 IMAGE_MAX_SIZE = config("IMAGE_MAX_SIZE", default=10 * 1024 * 1024, cast=int)  # 10 MB
 VIDEO_MAX_SIZE = config("VIDEO_MAX_SIZE", default=200 * 1024 * 1024, cast=int)  # 200 MB
 
-""" Gunicorn — recommended settings for production (used in gunicorn.conf.py) """
+
+""" Gunicorn - recommended settings for production (used in gunicorn.conf.py) """
 
 GUNICORN_WORKERS = config("GUNICORN_WORKERS", default=4, cast=int)  # CPU cores * 2 + 1
 GUNICORN_THREADS = config("GUNICORN_THREADS", default=2, cast=int)
@@ -207,12 +222,12 @@ LOGGING = {
     "disable_existing_loggers": False,
     "formatters": {
         "verbose": {
-            "format": "[{asctime}] {levelname} {name} {module}.{funcName}:{lineno} — {message}",
+            "format": "[{asctime}] {levelname} {name} {module}.{funcName}:{lineno} - {message}",
             "style": "{",
             "datefmt": "%Y-%m-%d %H:%M:%S",
         },
         "simple": {
-            "format": "[{asctime}] {levelname} — {message}",
+            "format": "[{asctime}] {levelname} - {message}",
             "style": "{",
             "datefmt": "%Y-%m-%d %H:%M:%S",
         },
@@ -247,11 +262,12 @@ LOGGING = {
     },
 }
 
+
 """ DRF Spectacular settings for API schema generation """
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "Social Media ERP API",
-    "DESCRIPTION": "Social Media microservice — part of the ERP system.",
+    "DESCRIPTION": "Social Media microservice - part of the ERP system.",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "SWAGGER_UI_SETTINGS": {
@@ -268,6 +284,7 @@ SPECTACULAR_SETTINGS = {
         }
     },
 }
+
 
 """ Cache - Redis Backend """
 
@@ -293,7 +310,7 @@ JAZZMIN_SETTINGS = {
     "site_header": "Betopian Administration",
     "site_brand": "Betopian",
     "custom_css": "admin/css/betopian.css",
-    "custom_js": "admin/js/betopian.js",
+    # "custom_js": "admin/js/betopian.js",
     "show_sidebar": True,
     "navigation_expanded": False,
     "order_with_respect_to": [

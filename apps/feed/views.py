@@ -20,7 +20,7 @@ logger = logging.getLogger("apps.contents")
 
 
 def _annotated_media_qs(user=None):
-    """Annotated PostMedia queryset — like/comment counts + is_liked per user."""
+    """Annotated PostMedia queryset - like/comment counts + is_liked per user."""
     qs = PostMedia.objects.annotate(
         like_count=Count("likes", distinct=True),
         comment_count=Count("comments", distinct=True),

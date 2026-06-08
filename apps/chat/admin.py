@@ -10,27 +10,20 @@ from .models import (
     MessageStatus,
 )
 
-# INLINES
 
 class ConversationParticipantInline(admin.TabularInline):
     model = ConversationParticipant
     extra = 0
     autocomplete_fields = ("user",)
-    readonly_fields = (
-        "user",
-        "is_online",
-        "last_seen",
-        "last_read_message",
-        "created_at",
-    )
-    can_delete = False
+    readonly_fields = ("created_at",)
+    show_change_link = True
 
 
 class MessageInline(admin.TabularInline):
     model = Message
     extra = 0
     show_change_link = True
-    autocomplete_fields = ("sender", "reply_to")
+
     readonly_fields = (
         "sender",
         "type",
@@ -40,8 +33,14 @@ class MessageInline(admin.TabularInline):
         "created_at",
     )
 
-
-# CONVERSATION
+    fields = (
+        "sender",
+        "type",
+        "body",
+        "is_edited",
+        "is_deleted",
+        "created_at",
+    )
 
 
 @admin.register(Conversation)
@@ -74,14 +73,14 @@ class ConversationAdmin(admin.ModelAdmin):
         "last_activity",
     )
 
-    inlines = [
+    inlines = (
         ConversationParticipantInline,
         MessageInline,
-    ]
+    )
 
     fieldsets = (
         (
-            "Conversation Info",
+            "Conversation",
             {
                 "fields": (
                     "type",
@@ -91,26 +90,11 @@ class ConversationAdmin(admin.ModelAdmin):
                 )
             },
         ),
-        (
-            "Participants",
-            {"fields": ("participant_summary",)},
-        ),
-        (
-            "Messages",
-            {"fields": ("message_summary",)},
-        ),
-        (
-            "Media",
-            {"fields": ("media_summary",)},
-        ),
-        (
-            "Reactions",
-            {"fields": ("reaction_summary",)},
-        ),
-        (
-            "Statuses",
-            {"fields": ("status_summary",)},
-        ),
+        ("Participants", {"fields": ("participant_summary",)}),
+        ("Messages", {"fields": ("message_summary",)}),
+        ("Media", {"fields": ("media_summary",)}),
+        ("Reactions", {"fields": ("reaction_summary",)}),
+        ("Statuses", {"fields": ("status_summary",)}),
         (
             "Audit",
             {
@@ -122,8 +106,6 @@ class ConversationAdmin(admin.ModelAdmin):
         ),
     )
 
-    # List display helpers
-
     @admin.display(description="Participants")
     def participant_count(self, obj):
         return obj.participants.count()
@@ -132,24 +114,21 @@ class ConversationAdmin(admin.ModelAdmin):
     def message_count(self, obj):
         return obj.messages.count()
 
-    # Detail page sections
-
     @admin.display(description="Participants")
     def participant_summary(self, obj):
         participants = obj.participants.select_related("user")
 
-        rows = [
-            f"• {p.user} | Online: {'Yes' if p.is_online else 'No'}"
-            for p in participants
-        ]
+        rows = [f"• {p.user}" for p in participants]
 
         return format_html("<br>".join(rows) if rows else "No participants")
 
-    @admin.display(description="Messages")
+    @admin.display(description="Recent Messages")
     def message_summary(self, obj):
         messages = obj.messages.select_related("sender").order_by("-created_at")[:20]
 
-        rows = [f"• [{m.sender}] {m.body[:80] or '(empty)'}" for m in messages]
+        rows = [
+            f"• [{m.sender}] {m.body[:80] if m.body else '(empty)'}" for m in messages
+        ]
 
         return format_html("<br>".join(rows) if rows else "No messages")
 
@@ -159,7 +138,7 @@ class ConversationAdmin(admin.ModelAdmin):
             "message"
         )[:50]
 
-        rows = [f"• {m.media_type} | {m.file_name}" for m in media]
+        rows = [f"• {m.media_type} | {m.file_name or m.file.name}" for m in media]
 
         return format_html("<br>".join(rows) if rows else "No media")
 
@@ -169,7 +148,7 @@ class ConversationAdmin(admin.ModelAdmin):
             message__conversation=obj
         ).select_related("user")[:50]
 
-        rows = [f"• {r.user} → {r.reaction}" for r in reactions]
+        rows = [f"• {r.user} - {r.reaction}" for r in reactions]
 
         return format_html("<br>".join(rows) if rows else "No reactions")
 
@@ -180,14 +159,29 @@ class ConversationAdmin(admin.ModelAdmin):
         ).select_related("recipient")[:50]
 
         rows = [
-            f"• {s.recipient} | Read={s.is_read} | Delivered={s.is_delivered}"
+            f"• {s.recipient} | Delivered={s.is_delivered} | Read={s.is_read}"
             for s in statuses
         ]
 
         return format_html("<br>".join(rows) if rows else "No statuses")
 
 
-# MESSAGE
+
+class MessageMediaInline(admin.TabularInline):
+    model = MessageMedia
+    extra = 0
+
+
+class MessageReactionInline(admin.TabularInline):
+    model = MessageReaction
+    extra = 0
+    autocomplete_fields = ("user",)
+
+
+class MessageStatusInline(admin.TabularInline):
+    model = MessageStatus
+    extra = 0
+    autocomplete_fields = ("recipient",)
 
 
 @admin.register(Message)
@@ -198,6 +192,7 @@ class MessageAdmin(admin.ModelAdmin):
         "sender",
         "type",
         "is_deleted",
+        "is_edited",
         "created_at",
     )
 
@@ -209,12 +204,64 @@ class MessageAdmin(admin.ModelAdmin):
 
     search_fields = (
         "body",
-        "sender__email",
         "sender__username",
+        "sender__email",
     )
 
     autocomplete_fields = (
         "conversation",
         "sender",
         "reply_to",
+    )
+
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+    )
+
+    inlines = (
+        MessageMediaInline,
+        MessageReactionInline,
+        MessageStatusInline,
+    )
+
+
+
+@admin.register(ConversationParticipant)
+class ConversationParticipantAdmin(admin.ModelAdmin):
+    list_display = ("id", "conversation", "user", "created_at")
+    autocomplete_fields = ("conversation", "user")
+
+
+@admin.register(MessageMedia)
+class MessageMediaAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "message",
+        "media_type",
+        "file_name",
+        "file_size",
+        "order",
+    )
+
+
+@admin.register(MessageReaction)
+class MessageReactionAdmin(admin.ModelAdmin):
+    list_display = ("id", "message", "user", "reaction")
+    autocomplete_fields = ("message", "user")
+
+
+@admin.register(MessageStatus)
+class MessageStatusAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "message",
+        "recipient",
+        "is_delivered",
+        "is_read",
+    )
+
+    autocomplete_fields = (
+        "message",
+        "recipient",
     )

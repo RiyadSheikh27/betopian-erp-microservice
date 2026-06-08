@@ -85,7 +85,7 @@ def _build_comment_tree(comments):
 
 class LikeToggleView(APIView):
     """
-    Toggle or switch reaction on any target — post, media item or reel.
+    Toggle or switch reaction on any target - post, media item or reel.
 
     Rules:
       - No existing reaction: create with given reaction
@@ -139,7 +139,7 @@ class LikeToggleView(APIView):
                 reacted = False
                 reaction = None
             else:
-                # Different reaction — switch
+                # Different reaction - switch
                 existing.reaction = reaction
                 existing.save(update_fields=["reaction", "updated_at"])
                 reacted = True
@@ -292,7 +292,7 @@ class CommentListCreateView(APIView):
         all_comments = list(
             Comment.objects.filter(content_type=content_type, object_id=pk)
             .select_related("user", "parent")
-            .order_by("created_at")  # oldest first — natural thread order
+            .order_by("created_at")  # oldest first - natural thread order
         )
 
         # Annotate reply_count on each comment
@@ -309,7 +309,7 @@ class CommentListCreateView(APIView):
         for c in all_comments:
             c.reply_count = reply_count_map.get(str(c.id), 0)
 
-        # Build tree in Python — O(n), no extra DB queries
+        # Build tree in Python - O(n), no extra DB queries
         roots = _build_comment_tree(all_comments)
 
         # Cursor pagination on roots only

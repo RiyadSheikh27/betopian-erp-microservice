@@ -1,4 +1,4 @@
-# Betopian ERP Microservice — A-Z VPS Deployment Guide
+# Betopian ERP Microservice - A-Z VPS Deployment Guide
 
 **Domain:** `social-media.betopiagroup.com`
 **Project path:** `/root/betopian-erp-microservice`
@@ -196,12 +196,12 @@ server {
     listen 80;
     server_name social-media.betopiagroup.com;
 
-    # Must be first — required for SSL certificate issuance
+    # Must be first - required for SSL certificate issuance
     location /.well-known/acme-challenge/ {
         root /var/www/html;
     }
 
-    # Static files — admin CSS + app static assets
+    # Static files - admin CSS + app static assets
     location /static/ {
         alias /root/betopian-erp-microservice/staticfiles/;
         expires 30d;
@@ -291,8 +291,8 @@ certbot --nginx -d social-media.betopiagroup.com
 
 When prompted:
 - Enter your email address
-- Agree to terms → `A`
-- Select **option 2** (redirect HTTP → HTTPS) ✅
+- Agree to terms - `A`
+- Select **option 2** (redirect HTTP - HTTPS) ✅
 
 ```bash
 # Test auto-renewal
@@ -339,7 +339,7 @@ curl -I https://social-media.betopiagroup.com
 
 ### Admin CSS Check
 
-Visit `https://social-media.betopiagroup.com/admin/` — the login page must be fully styled.
+Visit `https://social-media.betopiagroup.com/admin/` - the login page must be fully styled.
 
 If CSS is missing:
 

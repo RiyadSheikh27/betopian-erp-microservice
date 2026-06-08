@@ -1,15 +1,11 @@
 import mimetypes
-from django.conf import settings
 from rest_framework import serializers
-from .models import (
-    Conversation,
-    ConversationParticipant,
-    Message,
-    MessageMedia,
-    MessageReaction,
-    MessageStatus,
-)
+from .models import Conversation, Message, MessageMedia, MessageReaction
 
+""" File type constants """
+
+IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+VIDEO_TYPES = {"video/mp4", "video/quicktime", "video/x-msvideo", "video/webm"}
 DOC_TYPES = {
     "application/pdf",
     "application/msword",
@@ -17,18 +13,16 @@ DOC_TYPES = {
     "application/vnd.ms-excel",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 }
-IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
-VIDEO_TYPES = {"video/mp4", "video/quicktime", "video/x-msvideo", "video/webm"}
 
-DOC_MAX_SIZE = settings.DOC_MAX_SIZE
-IMAGE_MAX_SIZE = settings.IMAGE_MAX_SIZE
-VIDEO_MAX_SIZE = settings.VIDEO_MAX_SIZE
+IMAGE_MAX = 10 * 1024 * 1024  # 10 MB
+VIDEO_MAX = 200 * 1024 * 1024  # 200 MB
+DOC_MAX = 50 * 1024 * 1024  # 50 MB
 
 
-def _resolve_media_type(file):
+def resolve_media_type(file):
+    """Return (MediaType, mime) tuple. MediaType is None for unsupported files."""
     mime, _ = mimetypes.guess_type(file.name)
-    if not mime:
-        mime = getattr(file, "content_type", "")
+    mime = mime or getattr(file, "content_type", "")
     if mime in IMAGE_TYPES:
         return MessageMedia.MediaType.IMAGE, mime
     if mime in VIDEO_TYPES:
@@ -38,29 +32,13 @@ def _resolve_media_type(file):
     return None, mime
 
 
-class ConversationParticipantSerializer(serializers.Serializer):
-    """Used in group info - full participant list."""
-
-    id = serializers.UUIDField()
-    name = serializers.CharField()
-    avatar_url = serializers.URLField(allow_null=True)
-    is_online = serializers.BooleanField()
-    last_seen = serializers.DateTimeField(allow_null=True)
-
-
-class LastMessageSerializer(serializers.ModelSerializer):
-    sender_name = serializers.CharField(source="sender.name")
-
-    class Meta:
-        model = Message
-        fields = ("id", "sender_name", "type", "body", "created_at")
-
+""" Conversation serializers """
 
 class ConversationSerializer(serializers.ModelSerializer):
     other_user = serializers.SerializerMethodField()
     group_name = serializers.SerializerMethodField()
     group_avatar = serializers.SerializerMethodField()
-    last_message = LastMessageSerializer(read_only=True)
+    last_message = serializers.SerializerMethodField()
     unread_count = serializers.IntegerField(read_only=True, default=0)
     participant_count = serializers.IntegerField(read_only=True, default=0)
 
@@ -79,35 +57,52 @@ class ConversationSerializer(serializers.ModelSerializer):
         )
 
     def get_other_user(self, obj):
-        if obj.type != Conversation.ConversationType.DM:
+        if obj.type != Conversation.Type.DM:
             return None
-        request = self.context["request"]
-        other = (
-            obj.participants.exclude(user=request.user).select_related("user").first()
-        )
+        me = self.context["request"].user
+        other = obj.participants.exclude(user=me).select_related("user").first()
         if not other:
             return None
         return {
             "id": other.user.id,
             "name": other.user.name,
             "avatar_url": other.user.avatar_url,
-            "is_online": other.is_online,
-            "last_seen": other.last_seen,
+            "is_online": other.user.is_online,
+            "last_seen": other.user.last_seen,
         }
 
     def get_group_name(self, obj):
-        if obj.type != Conversation.ConversationType.GROUP:
-            return None
-        return obj.community.name if obj.community else None
+        return (
+            obj.community.name
+            if obj.type == Conversation.Type.GROUP and obj.community
+            else None
+        )
 
     def get_group_avatar(self, obj):
-        if obj.type != Conversation.ConversationType.GROUP:
-            return None
         request = self.context.get("request")
-        if obj.community and obj.community.cover_image and request:
+        if (
+            obj.type == Conversation.Type.GROUP
+            and obj.community
+            and obj.community.cover_image
+            and request
+        ):
             return request.build_absolute_uri(obj.community.cover_image.url)
         return None
 
+    def get_last_message(self, obj):
+        msg = obj.last_message
+        if not msg:
+            return None
+        return {
+            "id": msg.id,
+            "sender_name": msg.sender.name,
+            "type": msg.type,
+            "body": msg.body,
+            "created_at": msg.created_at,
+        }
+
+
+""" Message serializers """
 
 class MessageMediaSerializer(serializers.ModelSerializer):
     url = serializers.SerializerMethodField()
@@ -121,33 +116,10 @@ class MessageMediaSerializer(serializers.ModelSerializer):
         return request.build_absolute_uri(obj.file.url) if request else obj.file.url
 
 
-class ReplySnippetSerializer(serializers.ModelSerializer):
-    """Minimal reply preview - no deep nesting."""
-
-    sender_name = serializers.CharField(source="sender.name")
-
-    class Meta:
-        model = Message
-        fields = ("id", "sender_name", "type", "body")
-
-
-class MessageReactionDetailSerializer(serializers.ModelSerializer):
-    """Single reactor - used in reaction list view."""
-
-    user_id = serializers.UUIDField(source="user.id")
-    name = serializers.CharField(source="user.name")
-    avatar_url = serializers.URLField(source="user.avatar_url", allow_null=True)
-    reaction = serializers.CharField()
-
-    class Meta:
-        model = MessageReaction
-        fields = ("user_id", "name", "avatar_url", "reaction")
-
-
 class MessageSerializer(serializers.ModelSerializer):
     sender = serializers.SerializerMethodField()
+    reply_to = serializers.SerializerMethodField()
     media = MessageMediaSerializer(many=True, read_only=True)
-    reply_to = ReplySnippetSerializer(read_only=True)
     reactions = serializers.SerializerMethodField()
     read_by_count = serializers.IntegerField(read_only=True, default=0)
     is_mine = serializers.SerializerMethodField()
@@ -177,40 +149,62 @@ class MessageSerializer(serializers.ModelSerializer):
             "avatar_url": obj.sender.avatar_url,
         }
 
+    def get_reply_to(self, obj):
+        if not obj.reply_to:
+            return None
+        return {
+            "id": obj.reply_to.id,
+            "sender_name": obj.reply_to.sender.name,
+            "type": obj.reply_to.type,
+            "body": obj.reply_to.body,
+        }
+
     def get_is_mine(self, obj):
         request = self.context.get("request")
-        return request and obj.sender_id == request.user.id
+        return bool(request and obj.sender_id == request.user.id)
 
     def get_reactions(self, obj):
-        """Returns summary: {love: 2, haha: 1} - detail list via separate endpoint."""
         from django.db.models import Count
 
-        qs = obj.reactions.values("reaction").annotate(count=Count("id"))
-        return {r["reaction"]: r["count"] for r in qs}
+        return {
+            r["reaction"]: r["count"]
+            for r in obj.reactions.values("reaction").annotate(count=Count("id"))
+        }
 
 
-class MessageCreateSerializer(serializers.Serializer):
+class MediaUploadSerializer(serializers.Serializer):
+    """Validates files uploaded via HTTP for media messages."""
+
+    files = serializers.ListField(child=serializers.FileField(), required=True)
     body = serializers.CharField(allow_blank=True, required=False, default="")
     reply_to_id = serializers.UUIDField(required=False, allow_null=True)
-    files = serializers.ListField(
-        child=serializers.FileField(), required=False, default=list
-    )
-
-    def validate(self, data):
-        if not data.get("body") and not data.get("files"):
-            raise serializers.ValidationError("Message must have text or files.")
-        return data
 
     def validate_files(self, files):
+        size_map = {
+            MessageMedia.MediaType.IMAGE: IMAGE_MAX,
+            MessageMedia.MediaType.VIDEO: VIDEO_MAX,
+            MessageMedia.MediaType.DOC: DOC_MAX,
+        }
         for file in files:
-            media_type, mime = _resolve_media_type(file)
+            media_type, mime = resolve_media_type(file)
             if media_type is None:
-                raise serializers.ValidationError(f"'{file.name}' unsupported type.")
-            limits = {
-                MessageMedia.MediaType.IMAGE: IMAGE_MAX_SIZE,
-                MessageMedia.MediaType.VIDEO: VIDEO_MAX_SIZE,
-                MessageMedia.MediaType.DOC: DOC_MAX_SIZE,
-            }
-            if file.size > limits[media_type]:
-                raise serializers.ValidationError(f"'{file.name}' exceeds size limit.")
+                raise serializers.ValidationError(
+                    f"'{file.name}' is an unsupported file type."
+                )
+            if file.size > size_map[media_type]:
+                raise serializers.ValidationError(
+                    f"'{file.name}' exceeds the size limit."
+                )
         return files
+
+
+class MessageReactionDetailSerializer(serializers.ModelSerializer):
+    """Used in reaction list endpoint - shows who reacted with what."""
+
+    user_id = serializers.UUIDField(source="user.id")
+    name = serializers.CharField(source="user.name")
+    avatar_url = serializers.URLField(source="user.avatar_url", allow_null=True)
+
+    class Meta:
+        model = MessageReaction
+        fields = ("user_id", "name", "avatar_url", "reaction")

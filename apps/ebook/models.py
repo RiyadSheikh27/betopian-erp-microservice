@@ -6,7 +6,9 @@ class EbookTitle(TimeStampedModel):
     """A title/category that groups ebooks."""
 
     category_title = models.CharField(max_length=255, unique=True)
-    category_image = models.ImageField(upload_to="ebook/category/", blank=True, null=True)
+    category_image = models.ImageField(
+        upload_to="ebook/category/", blank=True, null=True
+    )
 
     class Meta(TimeStampedModel.Meta):
         ordering = ["created_at"]
@@ -31,4 +33,4 @@ class Ebook(TimeStampedModel):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"{self.category.category_title} — {self.file.name}"
+        return f"{self.category.category_title} - {self.file.name}"

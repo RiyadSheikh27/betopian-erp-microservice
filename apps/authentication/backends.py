@@ -65,7 +65,7 @@ class CentralTokenAuthentication(BaseAuthentication):
 
     def _sync_user(self, profile, token):
         employee_id = profile["employee_id"]
-    
+
         incoming = {
             "central_id": profile["id"],
             "email": profile["email"],
@@ -78,20 +78,22 @@ class CentralTokenAuthentication(BaseAuthentication):
             "company": profile.get("company", "") or profile.get("company_name", ""),
             "avatar_url": profile.get("avatar_url", ""),
         }
-    
+
         try:
             user = User.objects.get(employee_id=employee_id)
             changed = {k: v for k, v in incoming.items() if getattr(user, k) != v}
             changed["central_access_token"] = token
-    
+
             if changed:
                 for k, v in changed.items():
                     setattr(user, k, v)
                 user.save(update_fields=list(changed.keys()) + ["updated_at"])
-                logger.info("User synced | user_id=%s fields=%s", user.pk, list(changed.keys()))
+                logger.info(
+                    "User synced | user_id=%s fields=%s", user.pk, list(changed.keys())
+                )
             else:
                 User.objects.filter(pk=user.pk).update(central_access_token=token)
-    
+
         except User.DoesNotExist:
             user, created = User.objects.update_or_create(
                 central_id=incoming["central_id"],
@@ -103,17 +105,27 @@ class CentralTokenAuthentication(BaseAuthentication):
                 },
             )
             if created:
-                logger.info("New user created | user_id=%s email=%s", user.pk, user.email)
+                logger.info(
+                    "New user created | user_id=%s email=%s", user.pk, user.email
+                )
             else:
-                logger.info("User re-linked by central_id | user_id=%s email=%s", user.pk, user.email)
-    
+                logger.info(
+                    "User re-linked by central_id | user_id=%s email=%s",
+                    user.pk,
+                    user.email,
+                )
+
         try:
             from apps.contents.community import assign_communities
+
             assign_communities(user, profile)
         except Exception as e:
-            logger.error("Community assignment failed | user_id=%s error=%s", user.pk, e)
-    
+            logger.error(
+                "Community assignment failed | user_id=%s error=%s", user.pk, e
+            )
+
         return user  # ← this was missing
+
 
 def fetch_central_profile(central_id, token, session_id):
     """
@@ -131,7 +143,7 @@ def fetch_central_profile(central_id, token, session_id):
         )
         if resp.status_code == 200:
             data = resp.json()
-            # Unwrap {"employee": {...}} — fall back to flat dict if already flat
+            # Unwrap {"employee": {...}} - fall back to flat dict if already flat
             employee = data.get("employee") or data
             logger.debug(
                 "Employee fetched | central_id=%s name=%s",

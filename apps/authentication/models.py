@@ -51,6 +51,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     location = models.CharField(max_length=150, blank=True)
     company = models.CharField(max_length=150, blank=True)
     avatar_url = models.URLField(max_length=10000, blank=True, null=True)
+    
+    is_online = models.BooleanField(default=False)
+    last_seen = models.DateTimeField(blank=True, null=True)
 
     # Only set for Django admin superusers, never for central auth users
     password = models.CharField(max_length=128, blank=True, null=True)

@@ -107,10 +107,10 @@ In Postman, go to the **Body** tab and select **form-data**. Add the following f
 **Steps in Postman:**
 1. Set request method to **POST**
 2. Enter URL: `http://localhost:8000/api/posts/`
-3. Go to **Headers** tab → Add header:
+3. Go to **Headers** tab - Add header:
    - Key: `Authorization`
    - Value: `Bearer <your_access_token>`
-4. Go to **Body** tab → Select **form-data**
+4. Go to **Body** tab - Select **form-data**
 5. Add fields in order (important for matching captions to files):
    - `caption` (Text) - Post description
    - `privacy` (Text) - "public" or "only_me"
@@ -285,17 +285,17 @@ In Postman, go to the **Body** tab and select **form-data**. Add the following f
 **Steps in Postman:**
 1. Set request method to **PATCH**
 2. Enter URL: `http://localhost:8000/api/posts/{post_id}/` (replace {post_id} with actual UUID)
-3. Go to **Headers** tab → Add header:
+3. Go to **Headers** tab - Add header:
    - Key: `Authorization`
    - Value: `Bearer <your_access_token>`
-4. Go to **Body** tab → Select **form-data**
+4. Go to **Body** tab - Select **form-data**
 5. Add only the fields you want to update:
    - **Text fields**: caption, privacy, remove_media_ids, edit_media_id, edit_media_caption
    - **File fields**: add_files
 6. Click **Send**
 
 **Notes:**
-- All fields are optional — send only what you want to change
+- All fields are optional - send only what you want to change
 - For removing multiple media: Add multiple `remove_media_ids` rows with different UUIDs
 - For editing multiple captions: Add multiple `edit_media_id` and `edit_media_caption` pairs (matched positionally)
 
@@ -430,14 +430,14 @@ In Postman, go to the **Body** tab and select **form-data**. Add the following f
 **Steps in Postman:**
 1. Set request method to **POST**
 2. Enter URL: `http://localhost:8000/api/reels/`
-3. Go to **Headers** tab → Add header:
+3. Go to **Headers** tab - Add header:
    - Key: `Authorization`
    - Value: `Bearer <your_access_token>`
-4. Go to **Body** tab → Select **form-data**
+4. Go to **Body** tab - Select **form-data**
 5. Add fields:
-   - **video** → Select "File" type, click "Select Files" and choose your video file
-   - **caption** → Select "Text" type, enter your caption text
-   - **privacy** → Select "Text" type, enter "public" or "only_me"
+   - **video** - Select "File" type, click "Select Files" and choose your video file
+   - **caption** - Select "Text" type, enter your caption text
+   - **privacy** - Select "Text" type, enter "public" or "only_me"
 6. Click **Send**
 
 **cURL Example:**

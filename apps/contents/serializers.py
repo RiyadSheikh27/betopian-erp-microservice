@@ -28,7 +28,7 @@ def _resolve_media_type(file):
 
 
 class PostAuthorSerializer(serializers.Serializer):
-    """Author's basic information — mirrors central ERP user fields."""
+    """Author's basic information - mirrors central ERP user fields."""
 
     id = serializers.UUIDField()
     central_id = serializers.IntegerField()
@@ -66,7 +66,9 @@ class PostMediaSerializer(serializers.ModelSerializer):
     url = serializers.SerializerMethodField()
     likes_count = serializers.IntegerField(read_only=True, default=0)
     user_reaction = serializers.CharField(read_only=True, default=None, allow_null=True)
-    top_reacts    = serializers.ListField(child=serializers.CharField(), read_only=True, default=list)
+    top_reacts = serializers.ListField(
+        child=serializers.CharField(), read_only=True, default=list
+    )
     comment_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
@@ -96,7 +98,9 @@ class PostSerializer(serializers.ModelSerializer):
     like_count = serializers.IntegerField(read_only=True, default=0)
     comment_count = serializers.IntegerField(read_only=True, default=0)
     user_reaction = serializers.CharField(read_only=True, default=None, allow_null=True)
-    top_reacts    = serializers.ListField(child=serializers.CharField(), read_only=True, default=list)
+    top_reacts = serializers.ListField(
+        child=serializers.CharField(), read_only=True, default=list
+    )
     is_saved = serializers.BooleanField(read_only=True, default=False)
 
     class Meta:
@@ -210,7 +214,7 @@ class PostCreateSerializer(serializers.ModelSerializer):
 
 
 class PostUpdateSerializer(serializers.ModelSerializer):
-    """Update a post. All fields optional — send only what changed."""
+    """Update a post. All fields optional - send only what changed."""
 
     add_files = serializers.ListField(
         child=serializers.FileField(), write_only=True, required=False
@@ -324,7 +328,9 @@ class ReelSerializer(serializers.ModelSerializer):
     like_count = serializers.IntegerField(read_only=True, default=0)
     comment_count = serializers.IntegerField(read_only=True, default=0)
     user_reaction = serializers.CharField(read_only=True, default=None, allow_null=True)
-    top_reacts = serializers.ListField(child=serializers.CharField(), read_only=True, default=list)
+    top_reacts = serializers.ListField(
+        child=serializers.CharField(), read_only=True, default=list
+    )
     is_saved = serializers.BooleanField(read_only=True, default=False)
 
     class Meta:
@@ -338,8 +344,8 @@ class ReelSerializer(serializers.ModelSerializer):
             "view_count",
             "like_count",
             "comment_count",
-            "user_reaction",   
-            "top_reacts",   
+            "user_reaction",
+            "top_reacts",
             "is_saved",
             "is_edited",
             "created_at",

@@ -47,6 +47,18 @@ def _matches(profile_text, keywords):
             return True
     return False
 
+def ensure_community_conversation(community):
+    from apps.chat.models import Conversation, ConversationParticipant
+    conv, _ = Conversation.objects.get_or_create(
+        community=community,
+        defaults={"type": "group"},
+    )
+    return conv
+
+def sync_community_chat_member(community, user):
+    from apps.chat.models import ConversationParticipant
+    conv = ensure_community_conversation(community)
+    ConversationParticipant.objects.get_or_create(conversation=conv, user=user)
 
 """ 
 Main function to assign communities based on central profile data. 
@@ -103,11 +115,13 @@ def assign_communities(user, profile):
             CommunityMember.objects.bulk_create(
                 [CommunityMember(community_id=cid, user=user) for cid in new_ids]
             )
+            # Sync user into community group chat
+            for cid in new_ids:
+                from apps.contents.models import Community as C
+                sync_community_chat_member(C.objects.get(pk=cid), user)
             logger.info(
                 "Communities assigned | user_id=%s new=%s total_matched=%s",
-                user.pk,
-                len(new_ids),
-                len(matched_ids),
+                user.pk, len(new_ids), len(matched_ids),
             )
 
     user.community_assigned_at = timezone.now()

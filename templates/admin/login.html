@@ -5,7 +5,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Admin — Sign In</title>
+<title>Admin - Sign In</title>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -31,7 +31,7 @@ body{
   cursor:none;
 }
 
-/* ── CUSTOM CURSOR ── */
+/*  CUSTOM CURSOR  */
 #cur{
   position:fixed;width:10px;height:10px;
   border-radius:50%;background:var(--gold);
@@ -47,7 +47,7 @@ body{
   transition:width .22s,height .22s,border-color .22s;
 }
 
-/* ── CANVAS ── */
+/*  CANVAS  */
 canvas{position:fixed;inset:0;z-index:0}
 
 /* grain */
@@ -57,7 +57,7 @@ canvas{position:fixed;inset:0;z-index:0}
   opacity:.025;
 }
 
-/* ── CARD ── */
+/*  CARD  */
 .card{
   position:relative;z-index:10;
   width:412px;
@@ -85,7 +85,7 @@ canvas{position:fixed;inset:0;z-index:0}
   background:linear-gradient(90deg,transparent,var(--gold),transparent);
 }
 
-/* ── BRAND ── */
+/*  BRAND  */
 .brand{display:flex;align-items:center;gap:10px;margin-bottom:26px}
 .brand-mark{
   width:33px;height:33px;border-radius:8px;
@@ -111,7 +111,7 @@ canvas{position:fixed;inset:0;z-index:0}
 }
 @keyframes blink{0%,100%{opacity:1;box-shadow:0 0 7px #3de8c4}50%{opacity:.25;box-shadow:none}}
 
-/* ── HEADING ── */
+/*  HEADING  */
 .heading{
   font-family:'Oswald',sans-serif;
   font-size:30px;font-weight:600;
@@ -121,7 +121,7 @@ canvas{position:fixed;inset:0;z-index:0}
 .heading em{font-style:normal;color:var(--gold)}
 .sub{font-size:13px;color:var(--dim);font-weight:300;letter-spacing:.5px;margin-bottom:30px}
 
-/* ── FIELDS ── */
+/*  FIELDS  */
 .field{margin-bottom:15px}
 .lbl{
   display:flex;align-items:center;gap:5px;
@@ -166,7 +166,7 @@ input::placeholder{color:rgba(238,241,248,.25);font-weight:300}
 }
 .eyebtn:hover{color:var(--teal)}
 
-/* ── EXTRAS ── */
+/*  EXTRAS  */
 .extras{
   display:flex;align-items:center;
   justify-content:space-between;
@@ -196,7 +196,7 @@ input::placeholder{color:rgba(238,241,248,.25);font-weight:300}
 }
 .forgot:hover{opacity:1;text-decoration:underline}
 
-/* ══ SIGN-IN BUTTON — handcrafted, not AI ══ */
+/* ══ SIGN-IN BUTTON - handcrafted, not AI ══ */
 .btn-wrap{margin-bottom:0}
 
 .signin{
@@ -272,7 +272,7 @@ input::placeholder{color:rgba(238,241,248,.25);font-weight:300}
   transform:translateX(2px);
 }
 
-/* ── FOOTER ── */
+/*  FOOTER  */
 .div{
   display:flex;align-items:center;gap:10px;
   margin:20px 0 16px;
@@ -388,7 +388,7 @@ input::placeholder{color:rgba(238,241,248,.25);font-weight:300}
 </div>
 
 <script>
-/* ── Cursor ── */
+/*  Cursor  */
 const cur=document.getElementById('cur');
 const ring=document.getElementById('cur-ring');
 let mx=window.innerWidth/2, my=window.innerHeight/2;
@@ -401,7 +401,7 @@ document.addEventListener('mousemove',e=>{mx=e.clientX;my=e.clientY;});
   requestAnimationFrame(tick);
 })();
 
-/* ── Canvas ── */
+/*  Canvas  */
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
 let W,H;
@@ -412,7 +412,7 @@ resize(); window.addEventListener('resize',resize);
 let cx=W/2, cy=H/2;
 document.addEventListener('mousemove',e=>{cx=e.clientX;cy=e.clientY;});
 
-/* ── Nodes ── */
+/*  Nodes  */
 const NODES=[];
 const N=85;
 class Node{
@@ -451,7 +451,7 @@ class Node{
 }
 for(let i=0;i<N;i++) NODES.push(new Node());
 
-/* ── Ripples ── */
+/*  Ripples  */
 const RIPPLES=[];
 document.addEventListener('click',e=>{
   if(e.target.closest('.card')) return;
@@ -459,7 +459,7 @@ document.addEventListener('click',e=>{
     RIPPLES.push({x:e.clientX,y:e.clientY,r:i*18,alpha:.9-i*.3,speed:4+i*2});
 });
 
-/* ── Field lines (magnetic trails from cursor) ── */
+/*  Field lines (magnetic trails from cursor)  */
 const LINES=[];
 let lineTimer=0;
 const LINE_COUNT=6;
@@ -494,7 +494,7 @@ class Line{
   }
 }
 
-/* ── Render ── */
+/*  Render  */
 function render(){
   // fade trail
   ctx.fillStyle='rgba(6,10,18,0.16)';
@@ -558,7 +558,7 @@ function render(){
 }
 render();
 
-/* ── Card edge shimmer on hover ── */
+/*  Card edge shimmer on hover  */
 let shimmerTimer;
 document.querySelector('.card').addEventListener('mouseenter',()=>{
   shimmerTimer=setInterval(()=>{
@@ -574,7 +574,7 @@ document.querySelector('.card').addEventListener('mouseenter',()=>{
 });
 document.querySelector('.card').addEventListener('mouseleave',()=>clearInterval(shimmerTimer));
 
-/* ── Password toggle ── */
+/*  Password toggle  */
 const pw=document.getElementById('pw');
 const eye=document.getElementById('eye');
 const eico=document.getElementById('eyeico');

@@ -1,4 +1,3 @@
-import uuid
 from django.conf import settings
 from django.db import models
 from apps.utils.models import TimeStampedModel
@@ -6,15 +5,15 @@ from apps.utils.models import TimeStampedModel
 
 class Conversation(TimeStampedModel):
     """
-    DM: exactly 2 participants, community=None
-    Group: community FK set, participants = all community members
+    DM - community=None, exactly 2 participants
+    Group - community FK set, participants = community members
     """
 
-    class ConversationType(models.TextChoices):
+    class Type(models.TextChoices):
         DM = "dm", "Direct Message"
         GROUP = "group", "Group"
 
-    type = models.CharField(max_length=10, choices=ConversationType.choices)
+    type = models.CharField(max_length=10, choices=Type.choices)
     community = models.OneToOneField(
         "contents.Community",
         null=True,
@@ -33,29 +32,26 @@ class Conversation(TimeStampedModel):
 
     class Meta(TimeStampedModel.Meta):
         db_table = "conversations"
-        indexes = [
-            models.Index(fields=["-last_activity"], name="idx_conv_last_activity"),
-        ]
+        indexes = [models.Index(fields=["-last_activity"], name="idx_conv_activity")]
 
 
 class ConversationParticipant(TimeStampedModel):
+    """Links users to conversations."""
+
     conversation = models.ForeignKey(
         Conversation, on_delete=models.CASCADE, related_name="participants"
     )
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="conversations"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="chat_participants",
     )
-    last_read_message = models.ForeignKey(
-        "Message", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
-    )
-    last_seen = models.DateTimeField(null=True, blank=True)
-    is_online = models.BooleanField(default=False)
 
     class Meta(TimeStampedModel.Meta):
         db_table = "conversation_participants"
         constraints = [
             models.UniqueConstraint(
-                fields=["conversation", "user"], name="unique_conversation_participant"
+                fields=["conversation", "user"], name="unique_conv_participant"
             )
         ]
         indexes = [
@@ -64,7 +60,7 @@ class ConversationParticipant(TimeStampedModel):
 
 
 class Message(TimeStampedModel):
-    class MessageType(models.TextChoices):
+    class Type(models.TextChoices):
         TEXT = "text", "Text"
         MEDIA = "media", "Media"
         DOC = "doc", "Document"
@@ -76,9 +72,7 @@ class Message(TimeStampedModel):
     sender = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sent_messages"
     )
-    type = models.CharField(
-        max_length=10, choices=MessageType.choices, default=MessageType.TEXT
-    )
+    type = models.CharField(max_length=10, choices=Type.choices, default=Type.TEXT)
     body = models.TextField(blank=True)
     reply_to = models.ForeignKey(
         "self", null=True, blank=True, on_delete=models.SET_NULL, related_name="replies"
@@ -92,7 +86,7 @@ class Message(TimeStampedModel):
             models.Index(
                 fields=["conversation", "-created_at", "-id"],
                 name="idx_msg_conv_created",
-            ),
+            )
         ]
 
 
@@ -115,7 +109,7 @@ class MessageMedia(TimeStampedModel):
 
 
 class MessageReaction(TimeStampedModel):
-    """One reaction per user per message."""
+    """One reaction per user per message - same set as post reactions."""
 
     class Reaction(models.TextChoices):
         LOVE = "love", "Love"
@@ -129,9 +123,7 @@ class MessageReaction(TimeStampedModel):
         Message, on_delete=models.CASCADE, related_name="reactions"
     )
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="message_reactions",
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="msg_reactions"
     )
     reaction = models.CharField(max_length=10, choices=Reaction.choices)
 
@@ -143,20 +135,21 @@ class MessageReaction(TimeStampedModel):
             )
         ]
         indexes = [
-            models.Index(fields=["message", "reaction"], name="idx_msgreact_msg"),
+            models.Index(fields=["message", "reaction"], name="idx_msgreact_msg")
         ]
 
 
 class MessageStatus(TimeStampedModel):
-    """Per-recipient delivery + read status."""
+    """
+    Per-recipient delivery + read tracking.
+    DM only - skipped for group chats (too many rows).
+    """
 
     message = models.ForeignKey(
         Message, on_delete=models.CASCADE, related_name="statuses"
     )
     recipient = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="message_statuses",
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="msg_statuses"
     )
     is_delivered = models.BooleanField(default=False)
     is_read = models.BooleanField(default=False)
@@ -170,8 +163,6 @@ class MessageStatus(TimeStampedModel):
             )
         ]
         indexes = [
-            models.Index(
-                fields=["recipient", "is_read"], name="idx_msgstatus_recipient_read"
-            ),
-            models.Index(fields=["message"], name="idx_msgstatus_message"),
+            models.Index(fields=["recipient", "is_read"], name="idx_msgstatus_read"),
+            models.Index(fields=["message"], name="idx_msgstatus_msg"),
         ]

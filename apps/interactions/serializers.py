@@ -5,15 +5,16 @@ from .models import Like, Comment
 
 
 class LikerSerializer(serializers.ModelSerializer):
-    """Reactor list item — user info + reaction name."""
-    user_id     = serializers.UUIDField(source="user.id")
+    """Reactor list item - user info + reaction name."""
+
+    user_id = serializers.UUIDField(source="user.id")
     employee_id = serializers.CharField(source="user.employee_id")
-    name        = serializers.CharField(source="user.name")
-    avatar_url  = serializers.URLField(source="user.avatar_url")
-    reaction    = serializers.CharField()
+    name = serializers.CharField(source="user.name")
+    avatar_url = serializers.URLField(source="user.avatar_url")
+    reaction = serializers.CharField()
 
     class Meta:
-        model  = Like
+        model = Like
         fields = ("user_id", "employee_id", "name", "avatar_url", "reaction")
 
 
