@@ -1,11 +1,12 @@
 import mimetypes
+from django.conf import settings
 from rest_framework import serializers
 from .models import Conversation, Message, MessageMedia, MessageReaction
 
 """ File type constants """
 
-IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
-VIDEO_TYPES = {"video/mp4", "video/quicktime", "video/x-msvideo", "video/webm"}
+IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp", "image/jpg"}
+VIDEO_TYPES = {"video/mp4", "video/quicktime", "video/x-msvideo", "video/webm", "video/mov"}
 DOC_TYPES = {
     "application/pdf",
     "application/msword",
@@ -14,10 +15,9 @@ DOC_TYPES = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 }
 
-IMAGE_MAX = 10 * 1024 * 1024  # 10 MB
-VIDEO_MAX = 200 * 1024 * 1024  # 200 MB
-DOC_MAX = 50 * 1024 * 1024  # 50 MB
-
+IMAGE_MAX = settings.CHAT_IMAGE_MAX_SIZE_MB * 1024 * 1024
+VIDEO_MAX = settings.CHAT_VIDEO_MAX_SIZE_MB * 1024 * 1024
+DOC_MAX   = settings.CHAT_DOC_MAX_SIZE_MB   * 1024 * 1024
 
 def resolve_media_type(file):
     """Return (MediaType, mime) tuple. MediaType is None for unsupported files."""

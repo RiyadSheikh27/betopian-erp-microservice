@@ -13,6 +13,10 @@ SECRET_KEY = config("SECRET_KEY", default="dev-secret-key-change-in-production")
 DEBUG = config("DEBUG", default=True, cast=bool)
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="*").split(",")
 
+CSRF_TRUSTED_ORIGINS = [
+    "https://social-media.betopiagroup.com",
+    "https://www.social-media.betopiagroup.com",
+]
 
 """ Application definition """
 
@@ -96,17 +100,28 @@ CHANNEL_LAYERS = {
 
 """ Production Database - PostgreSQL """
 
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.postgresql",
+#         "NAME": "betopian_db",
+#         "USER": "betopian_user",
+#         "PASSWORD": "betopian@123",
+#         "HOST": "localhost",
+#         "PORT": "5432",
+#     }
+# }
+
+""" Docker Database """
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'betopian_db',
-        'USER': 'betopian_user',
-        'PASSWORD': 'betopian@123',
-        'HOST': 'localhost',
-        'PORT': '5432',
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": config("DB_NAME"),
+        "USER": config("DB_USER"),
+        "PASSWORD": config("DB_PASSWORD"),
+        "HOST": config("DB_HOST", default="localhost"),
+        "PORT": config("DB_PORT", default="5432"),
     }
 }
-
 
 """ Password validation """
 
@@ -203,10 +218,9 @@ AVATAR_MAX_DIMENSION = config("AVATAR_MAX_DIMENSION", default=400, cast=int)
 
 """ Message Media Size Limits """
 
-DOC_MAX_SIZE = config("DOC_MAX_SIZE", default=50 * 1024 * 1024, cast=int)  # 50 MB
-IMAGE_MAX_SIZE = config("IMAGE_MAX_SIZE", default=10 * 1024 * 1024, cast=int)  # 10 MB
-VIDEO_MAX_SIZE = config("VIDEO_MAX_SIZE", default=200 * 1024 * 1024, cast=int)  # 200 MB
-
+CHAT_IMAGE_MAX_SIZE_MB = config("CHAT_IMAGE_MAX_SIZE_MB", default=10, cast=int)
+CHAT_VIDEO_MAX_SIZE_MB = config("CHAT_VIDEO_MAX_SIZE_MB", default=200, cast=int)
+CHAT_DOC_MAX_SIZE_MB = config("CHAT_DOC_MAX_SIZE_MB", default=50, cast=int)
 
 """ Gunicorn - recommended settings for production (used in gunicorn.conf.py) """
 

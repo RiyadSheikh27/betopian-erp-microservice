@@ -6,8 +6,8 @@ from rest_framework import serializers
 from apps.utils.media import validate_file_size, compress_image
 from .models import Post, PostMedia, Reel, Community, CommunityMember
 
-IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
-VIDEO_TYPES = {"video/mp4", "video/quicktime", "video/x-msvideo", "video/webm"}
+IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp", "image/jpg"}
+VIDEO_TYPES = {"video/mp4", "video/quicktime", "video/x-msvideo", "video/webm", "video/mov"}
 
 """ Helper Function """
 

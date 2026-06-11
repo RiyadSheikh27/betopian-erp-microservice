@@ -10,7 +10,6 @@ from .models import (
     MessageStatus,
 )
 
-
 class ConversationParticipantInline(admin.TabularInline):
     model = ConversationParticipant
     extra = 0

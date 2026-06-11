@@ -175,7 +175,7 @@ class UserSearchView(APIView):
 
 class ConversationListView(APIView):
     """
-    GET  - full chat list ordered by last activity.
+    GET - full chat list ordered by last activity.
     POST - start or retrieve a DM. Body: { user_id }
     """
 
