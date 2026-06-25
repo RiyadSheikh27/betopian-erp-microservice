@@ -9,6 +9,12 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from apps.utils.media import compress_image
 from apps.utils.response import APIResponse
 from apps.contents.views import _encode_cursor, _decode_cursor, _apply_cursor
+
+import hmac
+import hashlib
+import time
+from django.conf import settings as django_settings
+
 from .models import (
     Conversation,
     ConversationParticipant,
@@ -441,3 +447,49 @@ class ConversationMediaView(APIView):
                 media, many=True, context={"request": request}
             ).data
         )
+
+
+class TurnCredentialsView(APIView):
+    """
+    Returns temporary TURN credentials for WebRTC.
+    Uses time-limited HMAC credentials (CoTURN REST API auth).
+    Client fetches this before initiating a call.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        ttl = 24 * 3600  # 24 hours
+        timestamp = int(time.time()) + ttl
+        username = f"{timestamp}:{request.user.id}"
+        secret = django_settings.TURN_SECRET
+        password = base64_hmac(username, secret)
+
+        return APIResponse.success(
+            data={
+                "ice_servers": [
+                    {
+                        "urls": [
+                            f"stun:{django_settings.TURN_HOST}:3478",
+                        ]
+                    },
+                    {
+                        "urls": [
+                            f"turn:{django_settings.TURN_HOST}:3478?transport=udp",
+                            f"turn:{django_settings.TURN_HOST}:3478?transport=tcp",
+                            f"turns:{django_settings.TURN_HOST}:5349?transport=tcp",
+                        ],
+                        "username": username,
+                        "credential": password,
+                    },
+                ]
+            }
+        )
+
+
+def base64_hmac(username, secret):
+    import base64
+
+    key = secret.encode()
+    msg = username.encode()
+    return base64.b64encode(hmac.new(key, msg, hashlib.sha1).digest()).decode()

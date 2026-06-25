@@ -26,16 +26,26 @@ services:
       timeout: 5s
       retries: 5
 
+  coturn:
+    image: coturn/coturn:latest
+    restart: unless-stopped
+    network_mode: host       
+    volumes:
+      - .:/app
+      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+      - coturn_logs:/var/log/coturn
+    command: -c /etc/coturn/turnserver.conf
+
   web:
     build: .
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "0.0.0.0:8000:8000"
     env_file:
       - .env
     volumes:
-      - media_data:/app/media
-      - static_data:/app/staticfiles
+      - ./media:/app/media
+      - ./staticfiles:/app/staticfiles
     depends_on:
       db:
         condition: service_healthy
@@ -49,5 +59,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  media_data:
-  static_data:
+  coturn_logs:

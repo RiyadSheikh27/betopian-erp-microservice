@@ -8,6 +8,8 @@ from drf_spectacular.views import (
     SpectacularRedocView,
 )
 from django.shortcuts import redirect
+from django.views.generic import TemplateView
+
 
 def trigger_error(request):
     division_by_zero = 1 / 0
@@ -16,15 +18,13 @@ def redirect_admin(request):
     return redirect('/') 
 urlpatterns = [
     path("api/v1/", include("apps.apis.urls")),
+    path("call-test/", TemplateView.as_view(template_name="call_test.html"), name="call-test"),
     path('admin/', redirect_admin), 
     path("", admin.site.urls),
+    
     # Schema & Docs
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
-    path(
-        "api/docs/",
-        SpectacularSwaggerView.as_view(url_name="schema"),
-        name="swagger-ui",
-    ),
+    path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui",),
     path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
     path("sentry-debug/", trigger_error),
 ]

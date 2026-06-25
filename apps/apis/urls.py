@@ -35,6 +35,7 @@ from apps.chat.views import (
     MessageListView,
     MessageReactionListView,
     ConversationMediaView,
+    TurnCredentialsView,
 )
     
 utils_urlpatterns = [
@@ -129,6 +130,9 @@ chat_urlpatterns = [
 
     # Shared media gallery
     path("conversations/<uuid:conv_id>/media/", ConversationMediaView.as_view(), name="chat-media"),
+    
+    # add to urlpatterns:
+    path("turn-credentials/", TurnCredentialsView.as_view(), name="turn-credentials"),
 ]
  
 urlpatterns = [

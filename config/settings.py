@@ -373,3 +373,6 @@ sentry_sdk.init(
     dsn="https://73fd8f8695bcbc9e7ea3441bb120546c@o4511380585250816.ingest.us.sentry.io/4511380587216896",
     send_default_pii=True,
 )
+
+TURN_HOST   = config("TURN_HOST",   default="your-server-ip")
+TURN_SECRET = config("TURN_SECRET", default="your-turn-secret")

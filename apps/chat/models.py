@@ -65,6 +65,7 @@ class Message(TimeStampedModel):
         MEDIA = "media", "Media"
         DOC = "doc", "Document"
         DELETED = "deleted", "Deleted"
+        CALL = "call", "Call"
 
     conversation = models.ForeignKey(
         Conversation, on_delete=models.CASCADE, related_name="messages"
@@ -165,4 +166,48 @@ class MessageStatus(TimeStampedModel):
         indexes = [
             models.Index(fields=["recipient", "is_read"], name="idx_msgstatus_read"),
             models.Index(fields=["message"], name="idx_msgstatus_msg"),
+        ]
+
+
+class CallLog(TimeStampedModel):
+    """
+    Stores call history per conversation.
+    Saved as a Message (type=call) in the conversation thread.
+    """
+
+    class CallType(models.TextChoices):
+        AUDIO = "audio", "Audio"
+        VIDEO = "video", "Video"
+
+    class CallStatus(models.TextChoices):
+        COMPLETED = "completed", "Completed"
+        MISSED = "missed", "Missed"
+        DECLINED = "declined", "Declined"
+
+    conversation = models.ForeignKey(
+        Conversation, on_delete=models.CASCADE, related_name="calls"
+    )
+    caller = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="calls_made"
+    )
+    receiver = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="calls_received",
+    )
+    call_type = models.CharField(max_length=10, choices=CallType.choices)
+    status = models.CharField(max_length=10, choices=CallStatus.choices)
+    duration = models.PositiveIntegerField(default=0)  # seconds
+    message = models.OneToOneField(  # linked chat message
+        Message,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="call_log",
+    )
+
+    class Meta(TimeStampedModel.Meta):
+        db_table = "call_logs"
+        indexes = [
+            models.Index(fields=["conversation", "-created_at"], name="idx_call_conv"),
         ]

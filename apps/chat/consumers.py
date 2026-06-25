@@ -11,12 +11,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
     """
     Handles all real-time chat events for both DM and group conversations.
 
-    Text messages - sent and received entirely via WebSocket
-    Media/files - uploaded via HTTP POST, then notified via WebSocket (media_sent)
-    Edit / Delete - via WebSocket only
-    Reactions - via WebSocket only
-    Typing / Read - via WebSocket only
+    Text messages - WebSocket only
+    Media/files - HTTP POST then media_sent via WebSocket
+    Edit/Delete - WebSocket only
+    Reactions - WebSocket only
+    Typing/Read - WebSocket only
     Presence - auto on connect/disconnect
+    Calling - WebRTC signaling via WebSocket (DM only)
+    call_invite - call_accept/call_decline/call_missed
+    - offer - answer - ice_candidate - call_end
     """
 
     async def connect(self):
@@ -62,6 +65,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return
 
         handlers = {
+            # Chat
             "message": self._handle_message,
             "media_sent": self._handle_media_sent,
             "typing": self._handle_typing,
@@ -69,12 +73,22 @@ class ChatConsumer(AsyncWebsocketConsumer):
             "edit": self._handle_edit,
             "delete": self._handle_delete,
             "react": self._handle_react,
+            # Calling
+            "call_invite": self._handle_call_invite,
+            "call_accept": self._handle_call_accept,
+            "call_decline": self._handle_call_decline,
+            "call_missed": self._handle_call_missed,
+            "call_end": self._handle_call_end,
+            # WebRTC signaling
+            "offer": self._handle_offer,
+            "answer": self._handle_answer,
+            "ice_candidate": self._handle_ice_candidate,
         }
         handler = handlers.get(data.get("type"))
         if handler:
             await handler(data)
 
-    # Event handlers
+    # Chat handlers
 
     async def _handle_message(self, data):
         body = data.get("body", "").strip()
@@ -86,7 +100,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
         )
 
     async def _handle_media_sent(self, data):
-        """Called after client uploads media via HTTP — broadcasts to group."""
         msg_id = data.get("message_id")
         if not msg_id:
             return
@@ -162,7 +175,122 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 self.room, {"type": "reaction_updated", "data": result}
             )
 
+    # Call handlers
+
+    async def _handle_call_invite(self, data):
+        """
+        Caller initiates a call.
+        Broadcasts ring event to the other participant.
+        """
+        call_type = data.get("call_type", "audio")  # audio | video
+        if call_type not in ("audio", "video"):
+            return
+
+        await self.channel_layer.group_send(
+            self.room,
+            {
+                "type": "call_invite",
+                "caller_id": str(self.user.id),
+                "caller_name": self.user.name,
+                "caller_avatar": self.user.avatar_url,
+                "call_type": call_type,
+            },
+        )
+
+    async def _handle_call_accept(self, data):
+        """Receiver accepts — notify caller to start WebRTC negotiation."""
+        await self.channel_layer.group_send(
+            self.room,
+            {
+                "type": "call_accept",
+                "receiver_id": str(self.user.id),
+            },
+        )
+
+    async def _handle_call_decline(self, data):
+        """Receiver declines — save declined call log."""
+        call_type = data.get("call_type", "audio")
+        await self._save_call_log(call_type, "declined", 0)
+        await self.channel_layer.group_send(
+            self.room,
+            {
+                "type": "call_decline",
+                "receiver_id": str(self.user.id),
+            },
+        )
+
+    async def _handle_call_missed(self, data):
+        """
+        Caller cancels after no answer — save missed call log.
+        Called by caller after ring timeout.
+        """
+        call_type = data.get("call_type", "audio")
+        await self._save_call_log(call_type, "missed", 0)
+        await self.channel_layer.group_send(
+            self.room,
+            {
+                "type": "call_missed",
+                "caller_id": str(self.user.id),
+                "call_type": call_type,
+            },
+        )
+
+    async def _handle_call_end(self, data):
+        """
+        Either party ends the call.
+        Caller/receiver sends duration in seconds.
+        """
+        call_type = data.get("call_type", "audio")
+        duration = int(data.get("duration", 0))
+        await self._save_call_log(call_type, "completed", duration)
+        await self.channel_layer.group_send(
+            self.room,
+            {
+                "type": "call_end",
+                "user_id": str(self.user.id),
+                "duration": duration,
+            },
+        )
+
+    # WebRTC signaling handlers
+    # These just relay SDP/ICE between the two peers via the channel group.
+    # Server never inspects the WebRTC payload — pure relay.
+
+    async def _handle_offer(self, data):
+        """Caller sends SDP offer to receiver."""
+        await self.channel_layer.group_send(
+            self.room,
+            {
+                "type": "webrtc_offer",
+                "sdp": data.get("sdp"),
+                "sender_id": str(self.user.id),
+            },
+        )
+
+    async def _handle_answer(self, data):
+        """Receiver sends SDP answer back to caller."""
+        await self.channel_layer.group_send(
+            self.room,
+            {
+                "type": "webrtc_answer",
+                "sdp": data.get("sdp"),
+                "sender_id": str(self.user.id),
+            },
+        )
+
+    async def _handle_ice_candidate(self, data):
+        """Relay ICE candidate between peers."""
+        await self.channel_layer.group_send(
+            self.room,
+            {
+                "type": "webrtc_ice",
+                "candidate": data.get("candidate"),
+                "sender_id": str(self.user.id),
+            },
+        )
+
     # Group - client broadcast handlers
+    # These are called when a message is sent to the group.
 
     async def chat_message(self, event):
         await self.send(
@@ -218,15 +346,156 @@ class ChatConsumer(AsyncWebsocketConsumer):
             text_data=json.dumps({"type": "reaction_updated", "data": event["data"]})
         )
 
-    # DB operations 
-    def _build_url(self, relative_url):
-        """Build absolute URL from relative media path."""
-        from django.conf import settings
+    # Call broadcast handlers
+    async def call_invite(self, event):
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "call_invite",
+                    "caller_id": event["caller_id"],
+                    "caller_name": event["caller_name"],
+                    "caller_avatar": event["caller_avatar"],
+                    "call_type": event["call_type"],
+                }
+            )
+        )
 
-        host = self.scope.get("server", ("localhost", 8000))
-        scheme = "https" if self.scope.get("scheme") == "wss" else "http"
-        base = f"{scheme}://{host[0]}:{host[1]}"
-        return f"{base}{relative_url}"
+    async def call_accept(self, event):
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "call_accept",
+                    "receiver_id": event["receiver_id"],
+                }
+            )
+        )
+
+    async def call_decline(self, event):
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "call_decline",
+                    "receiver_id": event["receiver_id"],
+                }
+            )
+        )
+
+    async def call_missed(self, event):
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "call_missed",
+                    "caller_id": event["caller_id"],
+                    "call_type": event["call_type"],
+                }
+            )
+        )
+
+    async def call_end(self, event):
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "call_end",
+                    "user_id": event["user_id"],
+                    "duration": event["duration"],
+                }
+            )
+        )
+
+    # WebRTC relay handlers
+    async def webrtc_offer(self, event):
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "offer",
+                    "sdp": event["sdp"],
+                    "sender_id": event["sender_id"],
+                }
+            )
+        )
+
+    async def webrtc_answer(self, event):
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "answer",
+                    "sdp": event["sdp"],
+                    "sender_id": event["sender_id"],
+                }
+            )
+        )
+
+    async def webrtc_ice(self, event):
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "ice_candidate",
+                    "candidate": event["candidate"],
+                    "sender_id": event["sender_id"],
+                }
+            )
+        )
+
+    # DB operations
+
+    def _build_url(self, relative_url):
+        headers = dict(self.scope.get("headers", []))
+        host = headers.get(b"host", b"localhost").decode()
+        scheme = "https" if self.scope.get("scheme") in ("wss", "https") else "http"
+        return f"{scheme}://{host}{relative_url}"
+
+    @database_sync_to_async
+    def _save_call_log(self, call_type, status, duration):
+        """Save call as a Message (type=call) + CallLog record."""
+        from .models import Message, CallLog, Conversation, ConversationParticipant
+
+        conv = Conversation.objects.get(pk=self.conv_id)
+
+        # Get the other participant
+        other = (
+            ConversationParticipant.objects.filter(conversation=conv)
+            .exclude(user=self.user)
+            .select_related("user")
+            .first()
+        )
+        if not other:
+            return
+
+        # Build human-readable call message body
+        status_labels = {
+            "completed": f"{'📹' if call_type == 'video' else '📞'} {call_type.capitalize()} call • {_format_duration(duration)}",
+            "missed": f"{'📹' if call_type == 'video' else '📞'} Missed {call_type} call",
+            "declined": f"{'📹' if call_type == 'video' else '📞'} {call_type.capitalize()} call declined",
+        }
+        body = status_labels.get(status, "Call")
+
+        msg = Message.objects.create(
+            conversation=conv,
+            sender=self.user,
+            type=Message.Type.CALL,
+            body=body,
+        )
+
+        # Determine caller/receiver
+        is_caller = status in (
+            "missed",
+        )  # caller sends missed, receiver sends declined
+        caller = self.user if status != "declined" else other.user
+        receiver = other.user if status != "declined" else self.user
+
+        CallLog.objects.create(
+            conversation=conv,
+            caller=caller,
+            receiver=receiver,
+            call_type=call_type,
+            status=status,
+            duration=duration,
+            message=msg,
+        )
+
+        Conversation.objects.filter(pk=self.conv_id).update(
+            last_message=msg, last_activity=timezone.now()
+        )
 
     @database_sync_to_async
     def _save_message(self, body, reply_to_id=None):
@@ -245,7 +514,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
             reply_to_id=reply_to_id,
         )
 
-        # Status rows for DM only
         conv = Conversation.objects.get(pk=self.conv_id)
         if conv.type == Conversation.Type.DM:
             other_ids = list(
@@ -295,7 +563,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def _fetch_message(self, msg_id):
-        """Fetch a message with full media — used after HTTP media upload."""
         from .models import Message
 
         try:
@@ -434,3 +701,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
         MessageStatus.objects.filter(
             message_id=message_id, recipient=self.user, is_read=False
         ).update(is_read=True, is_delivered=True, read_at=timezone.now())
+
+
+def _format_duration(seconds):
+    """Convert seconds to human readable mm:ss or hh:mm:ss."""
+    if seconds < 3600:
+        return f"{seconds // 60}:{seconds % 60:02d}"
+    return f"{seconds // 3600}:{(seconds % 3600) // 60:02d}:{seconds % 60:02d}"
