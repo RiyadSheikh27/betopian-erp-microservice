@@ -1,7 +1,9 @@
+import hashlib
 import logging
-import requests
 
+import requests
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 
@@ -11,9 +13,19 @@ logger = logging.getLogger("apps.authentication")
 CENTRAL_PROFILE_URL = "https://erp.betopiagroup.com/profiles/"
 CENTRAL_EMPLOYEE_URL = "https://erp.betopiagroup.com/employee-directory/"
 CENTRAL_TIMEOUT = 20
+PROFILE_CACHE_TTL = 300  # seconds — skip central ERP round-trip on repeat requests
 
 
 class CentralTokenAuthentication(BaseAuthentication):
+
+    @staticmethod
+    def _profile_cache_key(token):
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        return f"auth:profile:{token_hash}"
+
+    @staticmethod
+    def _user_cache_key(employee_id):
+        return f"auth:user_pk:{employee_id}"
 
     def authenticate(self, request):
         auth_header = request.headers.get("Authorization", "")
@@ -26,14 +38,16 @@ class CentralTokenAuthentication(BaseAuthentication):
 
         session_id = request.COOKIES.get("session_id", "")
         profile = self._fetch_profile(token, session_id)
-
-        # logger.info("Profile Response: %s", profile)
-
         user = self._sync_user(profile, token)
-        # Community auto-assignment.
         return (user, token)
 
     def _fetch_profile(self, token, session_id):
+        cache_key = self._profile_cache_key(token)
+        cached = cache.get(cache_key)
+        if cached is not None:
+            logger.debug("Profile cache hit")
+            return cached
+
         try:
             resp = requests.get(
                 CENTRAL_PROFILE_URL,
@@ -61,7 +75,9 @@ class CentralTokenAuthentication(BaseAuthentication):
             )
             raise AuthenticationFailed("Central auth service error.")
 
-        return resp.json()
+        profile = resp.json()
+        cache.set(cache_key, profile, PROFILE_CACHE_TTL)
+        return profile
 
     def _sync_user(self, profile, token):
         employee_id = profile["employee_id"]
@@ -79,10 +95,19 @@ class CentralTokenAuthentication(BaseAuthentication):
             "avatar_url": profile.get("avatar_url", ""),
         }
 
+        user_cache_key = self._user_cache_key(employee_id)
+        cached_user_pk = cache.get(user_cache_key)
+
         try:
-            user = User.objects.get(employee_id=employee_id)
+            if cached_user_pk:
+                user = User.objects.get(pk=cached_user_pk, employee_id=employee_id)
+            else:
+                user = User.objects.get(employee_id=employee_id)
+                cache.set(user_cache_key, str(user.pk), PROFILE_CACHE_TTL)
+
             changed = {k: v for k, v in incoming.items() if getattr(user, k) != v}
-            changed["central_access_token"] = token
+            if user.central_access_token != token:
+                changed["central_access_token"] = token
 
             if changed:
                 for k, v in changed.items():
@@ -91,10 +116,9 @@ class CentralTokenAuthentication(BaseAuthentication):
                 logger.info(
                     "User synced | user_id=%s fields=%s", user.pk, list(changed.keys())
                 )
-            else:
-                User.objects.filter(pk=user.pk).update(central_access_token=token)
 
         except User.DoesNotExist:
+            cache.delete(user_cache_key)
             user, created = User.objects.update_or_create(
                 central_id=incoming["central_id"],
                 defaults={
@@ -104,6 +128,7 @@ class CentralTokenAuthentication(BaseAuthentication):
                     **incoming,
                 },
             )
+            cache.set(user_cache_key, str(user.pk), PROFILE_CACHE_TTL)
             if created:
                 logger.info(
                     "New user created | user_id=%s email=%s", user.pk, user.email
@@ -124,7 +149,7 @@ class CentralTokenAuthentication(BaseAuthentication):
                 "Community assignment failed | user_id=%s error=%s", user.pk, e
             )
 
-        return user  # ← this was missing
+        return user
 
 
 def fetch_central_profile(central_id, token, session_id):

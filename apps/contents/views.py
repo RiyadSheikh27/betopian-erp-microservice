@@ -34,6 +34,7 @@ from .serializers import (
     ReelCreateSerializer,
     ReelUpdateSerializer,
 )
+# from apps.feed.views import invalidate_user_feed, invalidate_community_feed
 
 from django.contrib.contenttypes.models import ContentType
 
@@ -316,6 +317,12 @@ class PostListCreateView(APIView):
             )
 
         post = serializer.save(author=request.user, community=community)
+        
+        from apps.feed.views import invalidate_user_feed, invalidate_community_feed
+        invalidate_user_feed(request.user.pk)
+        if community:
+            invalidate_community_feed(community.pk)
+
         logger.info(
             "Post created | user_id=%s post_id=%s media=%s community=%s",
             request.user.pk,
@@ -698,6 +705,9 @@ class SaveToggleView(APIView):
             pk,
             saved,
         )
+        from apps.feed.views import invalidate_user_feed
+        invalidate_user_feed(request.user.pk)
+
         return APIResponse.success(
             data={"saved": saved},
             message="Saved." if saved else "Unsaved.",

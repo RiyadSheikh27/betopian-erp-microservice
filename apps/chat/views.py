@@ -36,6 +36,28 @@ logger = logging.getLogger("apps.chat")
 PAGE_SIZE = 20
 
 
+def _parse_page_size(request, default=PAGE_SIZE):
+    try:
+        return min(int(request.query_params.get("page_size", default)), 50)
+    except (TypeError, ValueError):
+        return default
+
+
+def _apply_conv_cursor(queryset, cursor_str):
+    """Filter to conversations older than cursor (by last_activity)."""
+    decoded = _decode_cursor(cursor_str)
+    if not decoded:
+        return queryset, "Invalid or tampered cursor."
+    activity_str, conv_id = decoded
+    return (
+        queryset.filter(
+            Q(last_activity__lt=activity_str)
+            | Q(last_activity=activity_str, id__lt=conv_id)
+        ),
+        None,
+    )
+
+
 """ Query helpers """
 
 
@@ -181,18 +203,39 @@ class UserSearchView(APIView):
 
 class ConversationListView(APIView):
     """
-    GET - full chat list ordered by last activity.
+    GET - cursor-paginated chat list ordered by last activity (newest first).
     POST - start or retrieve a DM. Body: { user_id }
     """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        page_size = _parse_page_size(request)
         qs = _conv_qs(request.user)
+        cursor = request.query_params.get("cursor")
+        if cursor:
+            qs, err = _apply_conv_cursor(qs, cursor)
+            if err:
+                return APIResponse.error(errors={"cursor": err}, status_code=400)
+
+        items = list(qs[: page_size + 1])
+        has_more = len(items) > page_size
+        if has_more:
+            items = items[:page_size]
+
         return APIResponse.success(
             data=ConversationSerializer(
-                qs, many=True, context={"request": request}
-            ).data
+                items, many=True, context={"request": request}
+            ).data,
+            meta={
+                "next_cursor": (
+                    _encode_cursor(items[-1].last_activity, items[-1].id)
+                    if has_more
+                    else None
+                ),
+                "has_more": has_more,
+                "page_size": page_size,
+            },
         )
 
     def post(self, request):
@@ -256,7 +299,9 @@ class ConversationParticipantsView(APIView):
 
 class MessageListView(APIView):
     """
-    GET  - cursor-paginated message history, newest first. Auto-marks read.
+    GET  - cursor-paginated message history, newest first.
+         Pass ?cursor= to load older messages (scroll up, WhatsApp-style).
+         Auto-marks read on the latest page only.
     POST - upload media/doc files (text messages go via WebSocket).
     """
 
@@ -271,6 +316,7 @@ class MessageListView(APIView):
         if not conv:
             return APIResponse.error(message="Conversation not found.", status_code=404)
 
+        page_size = _parse_page_size(request)
         qs = _msg_qs(conv)
         cursor = request.query_params.get("cursor")
         if cursor:
@@ -278,12 +324,13 @@ class MessageListView(APIView):
             if err:
                 return APIResponse.error(errors={"cursor": err}, status_code=400)
 
-        items = list(qs[: PAGE_SIZE + 1])
-        has_more = len(items) > PAGE_SIZE
+        items = list(qs[: page_size + 1])
+        has_more = len(items) > page_size
         if has_more:
-            items = items[:PAGE_SIZE]
+            items = items[:page_size]
 
-        _mark_read_bulk(items, request.user)
+        if not cursor:
+            _mark_read_bulk(items, request.user)
 
         return APIResponse.success(
             data=MessageSerializer(items, many=True, context={"request": request}).data,
@@ -294,6 +341,7 @@ class MessageListView(APIView):
                     else None
                 ),
                 "has_more": has_more,
+                "page_size": page_size,
             },
         )
 

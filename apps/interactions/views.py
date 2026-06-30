@@ -17,6 +17,7 @@ from .serializers import (
     CommentCreateSerializer,
     CommentUpdateSerializer,
 )
+from apps.feed.views import invalidate_user_feed
 
 logger = logging.getLogger("apps.interactions")
 
@@ -176,6 +177,7 @@ class LikeToggleView(APIView):
             reaction,
             reacted,
         )
+        invalidate_user_feed(request.user.pk)
 
         return APIResponse.success(
             data={
