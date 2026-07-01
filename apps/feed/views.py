@@ -21,7 +21,7 @@ FEED_PAGE_CACHE_TTL = 120
 SEEN_TTL = 7 * 24 * 3600
 
 
-# Seen-set helpers (Redis) — tracks what each user already received in the feed
+# Seen-set helpers (Redis) - tracks what each user already received in the feed
 
 def _redis():
     return caches["default"].client.get_client()
@@ -229,6 +229,29 @@ class PostNewsFeedView(APIView):
             len(seen) + len(keys),
         )
         return APIResponse.success(data=data, meta=meta)
+
+
+class FeedPostDetailView(APIView):
+    """Single post from the news feed — same shape as feed list items."""
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [FeedThrottle]
+
+    def get(self, request, pk):
+        post_ct = ContentType.objects.get_for_model(Post)
+        media_ct = ContentType.objects.get_for_model(PostMedia)
+
+        try:
+            post = _post_feed_qs(request.user, post_ct).get(pk=pk)
+        except Post.DoesNotExist:
+            return APIResponse.error(message="Post not found.", status_code=404)
+
+        _attach_top_reacts([post], post_ct)
+        _attach_top_reacts(list(post.media.all()), media_ct)
+
+        return APIResponse.success(
+            data=NFFeedPostSerializer(post, context={"request": request}).data
+        )
 
 
 def _reel_to_dict(r, request):

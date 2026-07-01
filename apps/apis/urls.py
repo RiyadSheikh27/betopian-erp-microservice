@@ -11,12 +11,19 @@ from apps.contents.views import (
     SaveToggleView,
     SavedItemListView
 )
-from apps.feed.views import CommunityPostFeedView, PostNewsFeedView, ReelNewsFeedView
+from apps.feed.views import CommunityPostFeedView, PostNewsFeedView, ReelNewsFeedView, FeedPostDetailView
 from apps.interactions.views import (
     LikeToggleView, 
     LikerListView, 
     CommentListCreateView, 
     CommentDetailView,
+)
+from apps.notifications.views import (
+    NotificationListView,
+    NotificationUnreadCountView,
+    NotificationReadAllView,
+    NotificationReadView,
+    NotificationDeleteView,
 )
 from apps.utils.views import ProfileImageUploadView
 from apps.mom.views import (
@@ -65,8 +72,33 @@ contents_urlpatterns = [
 feed_urlpatterns = [
     # News feed
     path("feed/posts/", PostNewsFeedView.as_view(), name="feed-posts"),
+    path("feed/posts/<uuid:pk>/", FeedPostDetailView.as_view(), name="feed-post-detail"),
     path("feed/reels/", ReelNewsFeedView.as_view(), name="feed-reels"),
     path("feed/community/<uuid:community_id>/", CommunityPostFeedView.as_view(), name="feed-community-posts"), 
+]
+
+notification_urlpatterns = [
+    path("notifications/", NotificationListView.as_view(), name="notification-list"),
+    path(
+        "notifications/unread-count/",
+        NotificationUnreadCountView.as_view(),
+        name="notification-unread-count",
+    ),
+    path(
+        "notifications/read-all/",
+        NotificationReadAllView.as_view(),
+        name="notification-read-all",
+    ),
+    path(
+        "notifications/<uuid:pk>/read/",
+        NotificationReadView.as_view(),
+        name="notification-read",
+    ),
+    path(
+        "notifications/<uuid:pk>/",
+        NotificationDeleteView.as_view(),
+        name="notification-delete",
+    ),
 ]
 
 interactions_urlpatterns = [
@@ -139,6 +171,7 @@ urlpatterns = [
     *auth_urlpatterns,
     *contents_urlpatterns,
     *feed_urlpatterns,
+    *notification_urlpatterns,
     *interactions_urlpatterns,
     *utils_urlpatterns,
     *mom_urlpatterns,

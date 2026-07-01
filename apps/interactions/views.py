@@ -119,11 +119,17 @@ class LikeToggleView(APIView):
         # Verify target exists
         try:
             if target_type == "media":
-                model.objects.get(pk=pk, post__privacy=Post.Privacy.PUBLIC)
+                target = model.objects.select_related("post__author").get(
+                    pk=pk, post__privacy=Post.Privacy.PUBLIC
+                )
             elif target_type == "post":
-                model.objects.get(pk=pk, privacy=Post.Privacy.PUBLIC)
+                target = model.objects.select_related("author").get(
+                    pk=pk, privacy=Post.Privacy.PUBLIC
+                )
             elif target_type == "reel":
-                model.objects.get(pk=pk, privacy=Reel.Privacy.PUBLIC)
+                target = model.objects.select_related("author").get(
+                    pk=pk, privacy=Reel.Privacy.PUBLIC
+                )
         except model.DoesNotExist:
             return APIResponse.error(message="Target not found.", status_code=404)
 
@@ -178,6 +184,13 @@ class LikeToggleView(APIView):
             reacted,
         )
         invalidate_user_feed(request.user.pk)
+
+        if reacted:
+            from apps.notifications.notify import notify_reaction
+
+            notify_reaction(
+                request.user, reaction, target_type, target, like_count
+            )
 
         return APIResponse.success(
             data={

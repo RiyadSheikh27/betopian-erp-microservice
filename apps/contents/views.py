@@ -317,8 +317,11 @@ class PostListCreateView(APIView):
             )
 
         post = serializer.save(author=request.user, community=community)
-        
+
+        from apps.feed.notify import notify_post_created
         from apps.feed.views import invalidate_user_feed, invalidate_community_feed
+
+        notify_post_created(post, request.user.pk)
         invalidate_user_feed(request.user.pk)
         if community:
             invalidate_community_feed(community.pk)
@@ -459,6 +462,10 @@ class ReelListCreateView(APIView):
             )
 
         reel = serializer.save(author=request.user)
+
+        from apps.feed.notify import notify_reel_created
+
+        notify_reel_created(reel, request.user.pk)
         logger.info("Reel created | user_id=%s reel_id=%s", request.user.pk, reel.pk)
         return APIResponse.success(
             data=ReelSerializer(reel, context={"request": request}).data,

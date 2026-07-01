@@ -600,6 +600,391 @@ curl -X PATCH http://localhost:8000/api/reels/550e8400-e29b-41d4-a716-4466554400
 
 ---
 
+## News Feed API
+
+### 1. Post News Feed
+**Endpoint:** `GET /feed/posts/`
+
+**Authentication:** Required
+
+**Description:** Public post feed, newest first. Returns the next batch of unseen posts per user.
+
+**Query Parameters:**
+- `page_size` (optional, default: 10, max: 50)
+- `search` (optional) - Search by caption; bypasses seen tracking
+
+**Response (200 OK):** Same post shape as the Posts API list, plus `like_count`, `comment_count`, `user_reaction`, `top_reacts`, `is_saved`.
+
+---
+
+### 2. Post News Feed Detail
+**Endpoint:** `GET /feed/posts/{id}/`
+
+**Authentication:** Required
+
+**Description:** Single post from the news feed. Use this to open a post from a notification (`post_id`).
+
+**Path Parameters:**
+- `id` (uuid, required) - Post UUID
+
+**Response (200 OK):** Same shape as one item from `GET /feed/posts/`.
+
+**Error Responses:**
+- `404 Not Found` - Post not found or not visible to you
+
+---
+
+### 3. Reel News Feed
+**Endpoint:** `GET /feed/reels/`
+
+**Authentication:** Required
+
+**Description:** Unified reel feed — direct reels and post videos, newest first.
+
+**Query Parameters:**
+- `page_size` (optional, default: 10, max: 50)
+
+---
+
+### 4. Community Post Feed
+**Endpoint:** `GET /feed/community/{community_id}/`
+
+**Authentication:** Required (must be a community member)
+
+**Query Parameters:**
+- `page_size` (optional, default: 10, max: 50)
+- `cursor` (optional) - Pagination cursor
+- `search` (optional) - Search by caption
+
+---
+
+## News Feed WebSocket
+
+Real-time notifications when new posts or reels are available. The server sends a refresh hint — the client should refresh the relevant REST feed endpoint above.
+
+### Connection
+```
+ws://localhost:8000/ws/feed/?token=<access_token>
+```
+
+**Authentication:** JWT token in query string (same token as REST API).
+
+### Client → Server
+
+Subscribe when entering a feed screen:
+
+```json
+{ "type": "subscribe", "feed": "posts" }
+```
+
+```json
+{ "type": "subscribe", "feed": "reels" }
+```
+
+```json
+{ "type": "subscribe", "feed": "community", "community_id": "550e8400-e29b-41d4-a716-446655440000" }
+```
+
+Unsubscribe when leaving a screen:
+
+```json
+{ "type": "unsubscribe", "feed": "posts" }
+```
+
+```json
+{ "type": "unsubscribe", "feed": "reels" }
+```
+
+```json
+{ "type": "unsubscribe", "feed": "community", "community_id": "550e8400-e29b-41d4-a716-446655440000" }
+```
+
+| Field | Values |
+|-------|--------|
+| `feed` | `posts`, `reels`, `community` |
+| `community_id` | Required for `community` feed |
+
+Community subscribe is rejected silently if the user is not a member.
+
+### Server → Client
+
+Sent when new public content is created (author is excluded):
+
+```json
+{
+  "type": "feed_update",
+  "feed": "posts",
+  "community_id": null,
+  "message": "New post, please refresh."
+}
+```
+
+```json
+{
+  "type": "feed_update",
+  "feed": "reels",
+  "community_id": null,
+  "message": "New reel, please refresh."
+}
+```
+
+```json
+{
+  "type": "feed_update",
+  "feed": "community",
+  "community_id": "550e8400-e29b-41d4-a716-446655440000",
+  "message": "New post, please refresh."
+}
+```
+
+**Frontend handling:**
+- Show the `message` as a refresh banner
+- On refresh, call the matching REST endpoint (`/feed/posts/`, `/feed/reels/`, or `/feed/community/{id}/`)
+- For `feed: "posts"` with a `community_id`, show the banner only if the user is a member of that community
+
+**Triggers:**
+| Event | Notifies |
+|-------|----------|
+| Public post created | `posts` (+ `community` if in a community) |
+| Public post with video | `posts` + `reels` |
+| Public reel created | `reels` |
+
+---
+
+## Notifications
+
+Real-time notifications for reactions and future events. Two separate concepts:
+
+| Concept | Field / API | Meaning |
+|---------|-------------|---------|
+| **Badge (unread count)** | `unread_count`, `read-all` | User has not opened the notification list since these arrived |
+| **Individual read** | `is_read`, `/{id}/read/` | User opened a specific notification |
+
+---
+
+### 1. List Notifications
+**Endpoint:** `GET /notifications/`
+
+**Authentication:** Required
+
+**Query Parameters:**
+- `page` (optional, default: 1)
+- `page_size` (optional, default: 20, max: 50)
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "event": "reaction",
+      "message": "Riyad and 2 other people reacted to your post.",
+      "actor": {
+        "id": "...",
+        "name": "Riyad",
+        "avatar_url": "..."
+      },
+      "reaction": "love",
+      "others_count": 2,
+      "target_type": "post",
+      "target_id": "...",
+      "post_id": "...",
+      "reel_id": null,
+      "is_read": false,
+      "created_at": "2026-06-30T10:30:00Z"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "page_size": 20,
+    "total": 1,
+    "total_pages": 1,
+    "unread_count": 1
+  }
+}
+```
+
+---
+
+### 2. Unread Count
+**Endpoint:** `GET /notifications/unread-count/`
+
+**Authentication:** Required
+
+**Description:** Badge count — notifications received after the user last called `read-all` (opened the list).
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "unread_count": 3
+  }
+}
+```
+
+---
+
+### 3. Mark All as Seen (clear badge)
+**Endpoint:** `POST /notifications/read-all/`
+
+**Authentication:** Required
+
+**Description:** Clears the badge only — user opened the notification list. Does **not** set `is_read` on individual items. Each notification stays `is_read: false` until opened via `/{id}/read/`.
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Notifications marked as seen.",
+  "data": {
+    "unread_count": 0
+  }
+}
+```
+
+Also pushes a WebSocket `unread_count` event (see below).
+
+---
+
+### 4. Mark One as Read
+**Endpoint:** `POST /notifications/{id}/read/`
+
+**Authentication:** Required
+
+**Description:** Marks a single notification as read when the user opens it (e.g. navigates to the post). Does not affect badge unless new notifications arrive after `read-all`.
+
+**Path Parameters:**
+- `id` (uuid, required) - Notification UUID
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Notification marked as read.",
+  "data": {
+    "id": "...",
+    "is_read": true,
+    "unread_count": 0
+  }
+}
+```
+
+**Error Responses:**
+- `404 Not Found` - Notification not found
+
+---
+
+### 5. Delete Notification
+**Endpoint:** `DELETE /notifications/{id}/`
+
+**Authentication:** Required
+
+**Description:** Permanently removes a notification from the user's list.
+
+**Path Parameters:**
+- `id` (uuid, required) - Notification UUID
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Notification deleted.",
+  "data": {
+    "unread_count": 0
+  }
+}
+```
+
+**Error Responses:**
+- `404 Not Found` - Notification not found
+
+**Frontend flow:**
+- On app load: `GET /notifications/unread-count/`
+- On WebSocket `new` event: set badge from `data.unread_count`
+- On notification list open: `POST /notifications/read-all/` → badge `0`
+- On single notification tap: `POST /notifications/{id}/read/` → `is_read: true` for that item
+- New notification after `read-all`: badge starts at `1` again
+
+---
+
+### Notifications WebSocket
+
+**Connection:**
+```
+ws://localhost:8000/ws/notifications/?token=<access_token>
+```
+
+Auto-subscribes on connect — no client message needed.
+
+All messages use the same envelope (designed for future Firebase mirroring):
+
+```json
+{
+  "type": "notification_event",
+  "event": "<event_name>",
+  "data": { }
+}
+```
+
+| `event` | When | Action |
+|---------|------|--------|
+| `new` | New notification created | Show alert / increment badge |
+| `unread_count` | After `read-all` (or future sync) | Set badge to `data.unread_count` |
+
+**Event: `new`**
+```json
+{
+  "type": "notification_event",
+  "event": "new",
+  "data": {
+    "id": "...",
+    "event": "reaction",
+    "message": "Riyad reacted to your post.",
+    "actor": {
+      "id": "...",
+      "name": "Riyad",
+      "avatar_url": "..."
+    },
+    "reaction": "love",
+    "others_count": 0,
+    "target_type": "post",
+    "target_id": "...",
+    "post_id": "...",
+    "reel_id": null,
+    "is_read": false,
+    "created_at": "2026-06-30T10:30:00Z",
+    "unread_count": 1
+  }
+}
+```
+
+**Event: `unread_count`**
+```json
+{
+  "type": "notification_event",
+  "event": "unread_count",
+  "data": {
+    "unread_count": 0
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `reaction` | The actor's reaction only (`love`, `sad`, `haha`, etc.) |
+| `others_count` | Other reactors besides the actor |
+| `is_read` | Individual open state — use `POST /notifications/{id}/read/` to set `true` |
+| `unread_count` | Badge count in `new` events; full sync in `unread_count` events |
+| `post_id` | Open via `GET /feed/posts/{post_id}/` |
+| `reel_id` | Set for reel reactions (reel detail API coming later) |
+| `target_type` | `post`, `media`, or `reel` |
+
+**Triggered when:** Someone reacts to your public post, media item, or reel (not on reaction remove; not when you react to your own content).
+
+---
+
 ## Common Response Format
 
 All endpoints follow a consistent response format:
