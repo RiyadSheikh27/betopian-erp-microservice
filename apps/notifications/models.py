@@ -35,3 +35,30 @@ class NotificationState(models.Model):
 
     class Meta:
         db_table = "notification_states"
+
+class DeviceToken(models.Model):
+    """Stores device tokens for push notifications."""
+    
+    class Platform(models.TextChoices):
+        ANDROID = "android", "Android"
+        IOS = "ios", "iOS"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="device_tokens",
+    )
+    device_id = models.CharField(max_length=255)
+    fcm_token = models.TextField(unique=True)
+    platform = models.CharField(max_length=10, choices=Platform.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "device_tokens"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "device_id"],
+                name="unique_user_device",
+            )
+        ]

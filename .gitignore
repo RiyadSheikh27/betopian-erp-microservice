@@ -55,3 +55,6 @@ dist/
 
 # Local settings
 local_settings.py
+
+# Secrets
+# secrets/firebase-service-account.json

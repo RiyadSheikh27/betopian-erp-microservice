@@ -760,6 +760,8 @@ Real-time notifications for reactions and future events. Two separate concepts:
 | **Badge (unread count)** | `unread_count`, `read-all` | User has not opened the notification list since these arrived |
 | **Individual read** | `is_read`, `/{id}/read/` | User opened a specific notification |
 
+Device registration for FCM is shared by chat push and future notification push — see [Push Notifications (Firebase)](#push-notifications-firebase).
+
 ---
 
 ### 1. List Notifications
@@ -982,6 +984,286 @@ All messages use the same envelope (designed for future Firebase mirroring):
 | `target_type` | `post`, `media`, or `reel` |
 
 **Triggered when:** Someone reacts to your public post, media item, or reel (not on reaction remove; not when you react to your own content).
+
+---
+
+## Push Notifications (Firebase)
+
+Used for alerts when the app is in the **background or closed**. In-app real-time still uses WebSocket.
+
+| Channel | When |
+|---------|------|
+| WebSocket | App open — chat, feed, notifications |
+| FCM push | App background/closed — system tray notification |
+
+**Requirements (Flutter / mobile):**
+- Firebase project with Android + iOS apps configured
+- Real `fcm_token` from `FirebaseMessaging.instance.getToken()` (Postman fake tokens will not deliver to a phone)
+- Register token after central ERP login
+- iOS: APNs key uploaded to Firebase; test on a **physical device**
+
+---
+
+### 1. Register Device
+**Endpoint:** `POST /devices/register/`
+
+**Authentication:** Required (`Authorization: Bearer <token>`)
+
+**Description:** Stores the device FCM token for push. Call after login and whenever the FCM token refreshes.
+
+**Body:**
+```json
+{
+  "device_id": "stable-device-uuid-from-app",
+  "fcm_token": "firebase-messaging-token",
+  "platform": "android"
+}
+```
+
+| Field | Required | Values |
+|-------|----------|--------|
+| `device_id` | Yes | Stable ID per device (from Flutter) |
+| `fcm_token` | Yes | From Firebase Messaging SDK |
+| `platform` | Yes | `android`, `ios` |
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Device registered."
+}
+```
+
+If the same `device_id` is sent again, the token is updated (`"Device updated."`).
+
+**Error Responses:**
+- `400` — missing `device_id` / `fcm_token`, or invalid `platform`
+- `401` — missing or invalid Bearer token
+
+---
+
+### 2. Unregister Device
+**Endpoint:** `DELETE /devices/unregister/`
+
+**Authentication:** Required
+
+**Description:** Removes the device token on logout.
+
+**Body:**
+```json
+{
+  "device_id": "stable-device-uuid-from-app"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Device unregistered."
+}
+```
+
+---
+
+## Chat API
+
+Direct messages (DM) and group chats. Text is sent over WebSocket; media/docs over HTTP then WebSocket broadcast.
+
+---
+
+### 1. List Conversations
+**Endpoint:** `GET /conversations/`
+
+**Authentication:** Required
+
+**Description:** All conversations for the authenticated user, sorted by `last_activity`.
+
+---
+
+### 2. Start DM
+**Endpoint:** `POST /conversations/`
+
+**Authentication:** Required
+
+**Body:**
+```json
+{
+  "user_id": "target-user-uuid"
+}
+```
+
+---
+
+### 3. Search Users (start chat)
+**Endpoint:** `GET /conversations/user/search/?q=<name>`
+
+**Authentication:** Required
+
+**Query Parameters:**
+- `q` (required, min 2 characters) — search by name
+
+---
+
+### 4. List Participants
+**Endpoint:** `GET /conversations/{conv_id}/participants/`
+
+**Authentication:** Required
+
+---
+
+### 5. Message History
+**Endpoint:** `GET /conversations/{conv_id}/messages/`
+
+**Authentication:** Required (must be a participant)
+
+**Query Parameters:**
+- `page_size` (optional, default: 20, max: 50)
+- `cursor` (optional) — load older messages
+
+**Description:** Newest first. Opening the first page marks messages as read (DM).
+
+---
+
+### 6. Upload Media / Documents
+**Endpoint:** `POST /conversations/{conv_id}/messages/`
+
+**Authentication:** Required
+
+**Content-Type:** `multipart/form-data`
+
+**Fields:**
+- `files` — one or more files
+- `body` (optional) — caption
+- `reply_to_id` (optional) — UUID
+
+**Response (201):** Message object. Then notify other clients via WebSocket (see below).
+
+---
+
+### Chat WebSocket
+
+**Connection:**
+```
+ws://localhost:8000/ws/chat/{conv_id}/?token=<access_token>
+```
+
+**Authentication:** JWT in query string (same as REST).
+
+User must be a **participant** of `conv_id`; otherwise the connection is rejected.
+
+#### Client → Server
+
+**Send text message:**
+```json
+{
+  "type": "message",
+  "body": "Hello!",
+  "reply_to_id": null
+}
+```
+
+**After media HTTP upload — broadcast to room:**
+```json
+{
+  "type": "media_sent",
+  "message_id": "uuid-from-201-response"
+}
+```
+
+**Typing:**
+```json
+{ "type": "typing", "is_typing": true }
+```
+
+**Mark read:**
+```json
+{ "type": "read", "message_id": "uuid" }
+```
+
+#### Server → Client
+
+**New message:**
+```json
+{
+  "type": "message",
+  "data": {
+    "id": "...",
+    "sender": {
+      "id": "...",
+      "name": "...",
+      "avatar_url": "..."
+    },
+    "type": "text",
+    "body": "Hello!",
+    "reply_to": null,
+    "media": [],
+    "reactions": {},
+    "read_by_count": 0,
+    "is_edited": false,
+    "is_deleted": false,
+    "created_at": "...",
+    "updated_at": "..."
+  }
+}
+```
+
+Other events: `typing`, `presence`, `message_edited`, `message_deleted`, `react`, call/WebRTC signaling.
+
+---
+
+### Chat Push Notification (FCM)
+
+Sent automatically when a **new message** is created (text via WebSocket, media after `media_sent`).
+
+**Recipients:** All conversation participants **except the sender**.
+
+**System notification (tray):**
+
+| Chat type | Title | Body |
+|-----------|-------|------|
+| DM | Sender name | Message text (or preview) |
+| Group | Group / community name | `{sender}: {message}` |
+| Media (no text) | Sender name | `Sent a photo` / `Sent a document` |
+
+**FCM `data` payload (for Flutter routing):**
+```json
+{
+  "type": "chat_message",
+  "conv_id": "conversation-uuid",
+  "message_id": "message-uuid",
+  "payload": "{...stringified WebSocket message data...}"
+}
+```
+
+**Flutter handling:**
+1. On login → `POST /devices/register/` with real `fcm_token`
+2. On logout → `DELETE /devices/unregister/`
+3. On notification tap → parse `conv_id` from `data` → open chat screen
+4. Optionally load history: `GET /conversations/{conv_id}/messages/`
+5. Suppress duplicate banner if user is already on that chat screen (client-side)
+
+**Testing notes:**
+- Postman **cannot** receive FCM on a phone — use a Flutter build with a real Firebase token
+- Register token for the **recipient** user, not the sender
+- Put recipient app in **background** to see the system notification
+- Server log `FCM sent | success=1 failure=0` means Firebase accepted the push
+- Invalid tokens are removed automatically after failed send; re-register from the app
+
+---
+
+### Chat + Push Flow
+
+```text
+Text:
+  Client → WS {"type":"message","body":"..."}
+  Server → saves DB → WS broadcast to room → FCM to other participants
+
+Media:
+  Client → POST /conversations/{id}/messages/ (multipart)
+  Client → WS {"type":"media_sent","message_id":"..."}
+  Server → WS broadcast → FCM to other participants
+```
 
 ---
 

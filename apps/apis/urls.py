@@ -44,6 +44,10 @@ from apps.chat.views import (
     ConversationMediaView,
     TurnCredentialsView,
 )
+from apps.notifications.views import (
+    DeviceRegisterView,
+    DeviceUnregisterView,
+)
     
 utils_urlpatterns = [
     path("upload-profile-image/", ProfileImageUploadView.as_view(), name="upload-profile-image"),
@@ -79,26 +83,12 @@ feed_urlpatterns = [
 
 notification_urlpatterns = [
     path("notifications/", NotificationListView.as_view(), name="notification-list"),
-    path(
-        "notifications/unread-count/",
-        NotificationUnreadCountView.as_view(),
-        name="notification-unread-count",
-    ),
-    path(
-        "notifications/read-all/",
-        NotificationReadAllView.as_view(),
-        name="notification-read-all",
-    ),
-    path(
-        "notifications/<uuid:pk>/read/",
-        NotificationReadView.as_view(),
-        name="notification-read",
-    ),
-    path(
-        "notifications/<uuid:pk>/",
-        NotificationDeleteView.as_view(),
-        name="notification-delete",
-    ),
+    path("notifications/unread-count/", NotificationUnreadCountView.as_view(), name="notification-unread-count",),
+    path("notifications/read-all/", NotificationReadAllView.as_view(), name="notification-read-all",),
+    path("notifications/<uuid:pk>/read/", NotificationReadView.as_view(), name="notification-read",),
+    path("notifications/<uuid:pk>/", NotificationDeleteView.as_view(), name="notification-delete",),
+    path("devices/register/", DeviceRegisterView.as_view(), name="device-register"),
+    path("devices/unregister/", DeviceUnregisterView.as_view(), name="device-unregister"),
 ]
 
 interactions_urlpatterns = [
@@ -166,7 +156,7 @@ chat_urlpatterns = [
     # add to urlpatterns:
     path("turn-credentials/", TurnCredentialsView.as_view(), name="turn-credentials"),
 ]
- 
+
 urlpatterns = [
     *auth_urlpatterns,
     *contents_urlpatterns,

@@ -378,3 +378,7 @@ sentry_sdk.init(
 
 TURN_HOST   = config("TURN_HOST",   default="your-server-ip")
 TURN_SECRET = config("TURN_SECRET", default="your-turn-secret")
+
+""" Firebase Configuration """
+
+FIREBASE_CREDENTIALS_PATH = config("FIREBASE_CREDENTIALS_PATH", default="")

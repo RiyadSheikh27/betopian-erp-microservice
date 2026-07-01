@@ -3,6 +3,7 @@ import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.utils import timezone
+from .push import notify_chat_message
 
 logger = logging.getLogger("apps.chat")
 
@@ -95,6 +96,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if not body:
             return
         msg = await self._save_message(body, data.get("reply_to_id"))
+        await database_sync_to_async(notify_chat_message)(
+            self.conv_id, self.user, msg
+        )
         await self.channel_layer.group_send(
             self.room, {"type": "chat_message", "data": msg}
         )
@@ -105,6 +109,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return
         msg = await self._fetch_message(msg_id)
         if msg:
+            await database_sync_to_async(notify_chat_message)(
+                self.conv_id, self.user, msg
+            )
             await self.channel_layer.group_send(
                 self.room, {"type": "chat_message", "data": msg}
             )

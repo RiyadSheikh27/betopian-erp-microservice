@@ -47,6 +47,7 @@ services:
       - .:/app
       - ./media:/app/media
       - ./staticfiles:/app/staticfiles
+      - ./secrets:/app/secrets:ro
     depends_on:
       db:
         condition: service_healthy
