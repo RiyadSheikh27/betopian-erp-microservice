@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Notification, NotificationState
+from .models import DeviceToken, Notification, NotificationState
 
 
 @admin.register(Notification)
@@ -15,3 +15,12 @@ class NotificationAdmin(admin.ModelAdmin):
 class NotificationStateAdmin(admin.ModelAdmin):
     list_display = ("user", "last_seen_at", "updated_at")
     search_fields = ("user__username", "user__email")
+
+
+@admin.register(DeviceToken)
+class DeviceTokenAdmin(admin.ModelAdmin):
+    list_display = ("user", "device_id", "platform", "created_at", "updated_at")
+    list_filter = ("platform", "created_at")
+    search_fields = ("user__username", "user__email", "device_id", "fcm_token")
+    readonly_fields = ("created_at", "updated_at")
+    ordering = ("-updated_at",)

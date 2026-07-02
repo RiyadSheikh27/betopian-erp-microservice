@@ -1,0 +1,63 @@
+import jwt
+import requests
+from rest_framework_simplejwt.tokens import AccessToken
+from rest_framework_simplejwt.exceptions import TokenError
+
+CENTRAL_MOBILE_PROFILE_URL = "https://erp.betopiagroup.com/mobile-api/profile"
+CENTRAL_TIMEOUT = 15
+
+
+class SSOServiceError(Exception):
+    def __init__(self, message, status_code=401):
+        self.message = message
+        self.status_code = status_code
+        super().__init__(message)
+
+
+def decode_ms_claims(token):
+    """
+    Unverified decode of the Microsoft token, only to read oid/email for our own
+    JWT. Authenticity is verified by the central system, not here.
+    """
+    try:
+        return jwt.decode(token, options={"verify_signature": False})
+    except jwt.InvalidTokenError:
+        return {}
+
+
+def fetch_central_profile(ms_token):
+    """
+    Fetch the user's profile from central ERP using the Microsoft access token.
+    Central validates the token: 200 = valid, 401 = invalid/expired.
+    """
+    try:
+        resp = requests.get(
+            CENTRAL_MOBILE_PROFILE_URL,
+            headers={"Authorization": f"Bearer {ms_token}"},
+            timeout=CENTRAL_TIMEOUT,
+        )
+    except requests.RequestException:
+        raise SSOServiceError("Central profile service unreachable.", 503)
+
+    if resp.status_code == 401:
+        raise SSOServiceError("Invalid or expired Microsoft token.", 401)
+    if resp.status_code != 200:
+        raise SSOServiceError("Unable to fetch central profile.", 502)
+    return resp.json()
+
+
+def get_token_from_request(request):
+    """Extract the bearer token from the Authorization header."""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None
+    return auth_header.split(" ", 1)[1].strip()
+
+
+def decode_jwt_payload(token):
+    """Decode and validate our own issued JWT, return payload dict or None."""
+    try:
+        access = AccessToken(token)
+        return {"uid": access.get("uid"), "email": access.get("email")}
+    except TokenError:
+        return None

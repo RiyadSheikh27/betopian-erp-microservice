@@ -132,8 +132,7 @@ def _mark_read_bulk(messages, user):
 def _search_central(query, request):
     """Search central ERP employee directory."""
     import requests as req
-
-    token = request.headers.get("Authorization", "").replace("Bearer ", "").strip()
+    token = getattr(request.user, "central_access_token", "")
     try:
         resp = req.get(
             "https://erp.betopiagroup.com/employee-directory/",

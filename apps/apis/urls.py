@@ -1,5 +1,5 @@
 from django.urls import path
-from apps.authentication.views import ProfileView, LogoutView
+from apps.authentication.views import ProfileView, LogoutView, SSOLoginView
 from apps.contents.views import (
     PostListCreateView,
     PostDetailView,
@@ -55,6 +55,7 @@ utils_urlpatterns = [
 
 auth_urlpatterns = [
     # Authentication
+    path("login/", SSOLoginView.as_view(), name="auth-login"),
     path("logout/", LogoutView.as_view(), name="auth-logout"),
     path("profile/", ProfileView.as_view(), name="auth-profile"),
 ]

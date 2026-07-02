@@ -10,6 +10,27 @@ from rest_framework.exceptions import AuthenticationFailed
 User = get_user_model()
 logger = logging.getLogger("apps.authentication")
 
+
+class AppJWTAuthentication(BaseAuthentication):
+    """Authenticate requests using our own issued JWT (from SSO login)."""
+
+    def authenticate(self, request):
+        from .utils import decode_jwt_payload, get_token_from_request
+
+        token = get_token_from_request(request)
+        if not token:
+            return None
+
+        payload = decode_jwt_payload(token)
+        if not payload or not payload.get("email"):
+            return None
+
+        user = User.objects.filter(email__iexact=payload["email"]).first()
+        if not user:
+            return None
+        return (user, token)
+
+
 CENTRAL_PROFILE_URL = "https://erp.betopiagroup.com/profiles/"
 CENTRAL_EMPLOYEE_URL = "https://erp.betopiagroup.com/employee-directory/"
 CENTRAL_TIMEOUT = 20
