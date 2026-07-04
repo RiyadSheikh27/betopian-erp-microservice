@@ -464,7 +464,7 @@ Two delivery rails from a single API:
 - **In-app real-time:** `NotificationConsumer` (`/ws/notifications/`) — each user joins their own group `notify_<user_id>`; `notify.py::deliver()` pushes a typed envelope.
 - **Push (background/offline):** `DeviceToken` model stores per-device FCM tokens; `apps/utils/fcm.py::send_to_user` does a multicast send and **auto-prunes dead tokens**.
 - **Models:** `Notification` (event + JSON payload + read flag), `NotificationState` (last-seen timestamp → drives the unread **badge count**), `DeviceToken`.
-- **Endpoints:** list, unread-count, read-all, mark-read, delete, `devices/unregister` (device registration at login).
+- **Endpoints:** list, unread-count, read-all, mark-read, delete, `devices/register`, `devices/unregister` (also register at login).
 
 ### 4.8 MoM — Minutes of Meetings (`apps/mom`)
 

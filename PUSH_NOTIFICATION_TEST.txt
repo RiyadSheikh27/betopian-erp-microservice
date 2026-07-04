@@ -97,7 +97,7 @@ Notes
 - Login WITHOUT fcm_token still works; user just won't receive push until they login with push fields.
 - FCM token refresh: login again with the new fcm_token (same deviceId).
 - Postman/curl cannot receive FCM — test push on a real phone with Flutter app in background.
-- Chat push is automatic on new message; no separate register API.
+- Login WITH fcm_token at login, OR register after login via POST /devices/register/
 
 Login body reference
 --------------------

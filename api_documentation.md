@@ -909,7 +909,7 @@ Real-time notifications for reactions and future events. Two separate concepts:
 | **Badge (unread count)** | `unread_count`, `read-all` | User has not opened the notification list since these arrived |
 | **Individual read** | `is_read`, `/{id}/read/` | User opened a specific notification |
 
-Device registration for FCM happens at **login** (`deviceId` + `fcm_token` + `platform`) — see [Push Notifications (Firebase)](#push-notifications-firebase).
+Device registration for FCM: at **login** or **`POST /devices/register/`** — see [Push Notifications (Firebase)](#push-notifications-firebase).
 
 ---
 
@@ -1148,14 +1148,16 @@ Used for alerts when the app is in the **background or closed**. In-app real-tim
 **Requirements (Flutter / mobile):**
 - Firebase project with Android + iOS apps configured
 - Real `fcm_token` from `FirebaseMessaging.instance.getToken()` (Postman fake tokens will not deliver to a phone)
-- Send `deviceId`, `fcm_token`, and `platform` in the **login** body (re-send on token refresh via login)
+- Send `deviceId`, `fcm_token`, and `platform` at **login**, or call `POST /devices/register/` after login (e.g. on FCM token refresh)
 - iOS: APNs key uploaded to Firebase; test on a **physical device**
 
 ---
 
-### 1. Register Device (via Login)
+### 1. Register Device
 
-Device tokens are registered automatically during `POST /login/` when the client sends push fields:
+Register at **login** or via **`POST /devices/register/`** after login (useful when FCM token refreshes without re-login).
+
+**Option A — at login** (`POST /login/`):
 
 ```json
 {
@@ -1166,17 +1168,39 @@ Device tokens are registered automatically during `POST /login/` when the client
 }
 ```
 
-| Field | Required for push | Values |
-|-------|-------------------|--------|
-| `deviceId` | Yes | Stable ID per device (from Flutter) |
+**Option B — after login** (`POST /devices/register/`):
+
+**Authentication:** Required (`Authorization: Bearer <token>`)
+
+**Body:**
+```json
+{
+  "device_id": "stable-device-uuid-from-app",
+  "fcm_token": "firebase-messaging-token",
+  "platform": "android"
+}
+```
+
+| Field | Required | Values |
+|-------|----------|--------|
+| `device_id` | Yes | Stable ID per device (from Flutter) |
 | `fcm_token` | Yes | From Firebase Messaging SDK |
 | `platform` | Yes | `android`, `ios` |
 
-If the same `deviceId` is sent again on a later login, the token is updated.
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Device registered."
+}
+```
 
-**Error responses (login):**
-- `422` — push fields incomplete (e.g. `fcm_token` without `platform`)
-- `401` — Microsoft token invalid
+If the same `device_id` is sent again, the token is updated (`"Device updated."`).
+
+**Error responses:**
+- `400` — missing `device_id` / `fcm_token`, or invalid `platform`
+- `401` — missing or invalid Bearer token
+- `422` (login only) — push fields incomplete on login body
 
 ---
 
@@ -1375,7 +1399,7 @@ Sent automatically when a **new message** is created (text via WebSocket, media 
 ```
 
 **Flutter handling:**
-1. On login → send `deviceId`, `fcm_token`, and `platform` in `POST /login/`
+1. On login → send push fields in `POST /login/`, **or** `POST /devices/register/` after login
 2. On logout → `DELETE /devices/unregister/`
 3. On notification tap → parse `conv_id` from `data` → open chat screen
 4. Optionally load history: `GET /conversations/{conv_id}/messages/`

@@ -11,15 +11,17 @@ logger = logging.getLogger("apps.notifications")
 
 
 def register_device(user, device_id, fcm_token, platform):
-    """Store or update FCM token for push notifications (called from login)."""
+    """Replace the user's FCM token (one row per user)."""
     from .models import DeviceToken
 
-    obj, _ = DeviceToken.objects.update_or_create(
+    DeviceToken.objects.filter(fcm_token=fcm_token).delete()
+    DeviceToken.objects.filter(user=user).delete()
+    DeviceToken.objects.create(
         user=user,
         device_id=device_id,
-        defaults={"fcm_token": fcm_token, "platform": platform},
+        fcm_token=fcm_token,
+        platform=platform,
     )
-    DeviceToken.objects.filter(fcm_token=fcm_token).exclude(pk=obj.pk).delete()
 
 
 def _serialize(items):
@@ -123,14 +125,51 @@ class NotificationDeleteView(APIView):
             message="Notification deleted.",
         )
 
+
+class DeviceRegisterView(APIView):
+    """Register or update FCM token (e.g. after login or token refresh)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        device_id = (
+            request.data.get("device_id") or request.data.get("deviceId") or ""
+        ).strip()
+        fcm_token = request.data.get("fcm_token", "").strip()
+        platform = request.data.get("platform", "").lower()
+
+        if not device_id or not fcm_token:
+            return APIResponse.error(
+                errors={"detail": "device_id (or deviceId) and fcm_token are required."},
+                status_code=400,
+            )
+        if platform not in ("android", "ios"):
+            return APIResponse.error(
+                errors={"platform": "Use android or ios."},
+                status_code=400,
+            )
+
+        from .models import DeviceToken
+
+        existed = DeviceToken.objects.filter(user=request.user).exists()
+        register_device(request.user, device_id, fcm_token, platform)
+
+        return APIResponse.success(
+            message="Device registered." if not existed else "Device updated."
+        )
+
+
 class DeviceUnregisterView(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request):
-        device_id = request.data.get("device_id", "").strip()
+        device_id = (
+            request.data.get("device_id") or request.data.get("deviceId") or ""
+        ).strip()
         if not device_id:
             return APIResponse.error(
-                errors={"device_id": "Required."}, status_code=400
+                errors={"device_id": "Required (device_id or deviceId)."},
+                status_code=400,
             )
 
         from .models import DeviceToken

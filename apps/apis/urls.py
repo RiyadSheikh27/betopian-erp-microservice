@@ -44,7 +44,7 @@ from apps.chat.views import (
     ConversationMediaView,
     TurnCredentialsView,
 )
-from apps.notifications.views import DeviceUnregisterView
+from apps.notifications.views import DeviceRegisterView, DeviceUnregisterView
     
 utils_urlpatterns = [
     path("upload-profile-image/", ProfileImageUploadView.as_view(), name="upload-profile-image"),
@@ -85,6 +85,7 @@ notification_urlpatterns = [
     path("notifications/read-all/", NotificationReadAllView.as_view(), name="notification-read-all",),
     path("notifications/<uuid:pk>/read/", NotificationReadView.as_view(), name="notification-read",),
     path("notifications/<uuid:pk>/", NotificationDeleteView.as_view(), name="notification-delete",),
+    path("devices/register/", DeviceRegisterView.as_view(), name="device-register"),
     path("devices/unregister/", DeviceUnregisterView.as_view(), name="device-unregister"),
 ]
 
