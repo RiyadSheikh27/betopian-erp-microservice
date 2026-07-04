@@ -89,6 +89,17 @@ class SSOLoginView(APIView):
             data.get("deviceId", ""),
         )
 
+        if data.get("fcm_token"):
+            from apps.notifications.views import register_device
+
+            register_device(
+                user,
+                data["deviceId"],
+                data["fcm_token"],
+                data["platform"],
+            )
+            logger.info("Device registered for push | user=%s device=%s", user.pk, data["deviceId"])
+
         access = AccessToken()
         access["uid"] = azure_oid
         access["email"] = user.email

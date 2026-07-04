@@ -2,13 +2,162 @@
 
 ## Base URL
 ```
-http://localhost:8000/api/
+http://localhost:8000/api/v1/
 ```
 
 ## Authentication
-All endpoints require JWT token authentication. Include the token in the request header:
+All protected endpoints require our own JWT (issued by `POST /login/`). Include it in the request header:
 ```
 Authorization: Bearer <access_token>
+```
+
+### Token model
+The app uses **two different tokens** — do not confuse them:
+
+| Token | Issued by | Sent by client | Used for |
+| --- | --- | --- | --- |
+| **App JWT** (`access_token` / `refresh_token`) | This service, on `POST /login/` | On every request (`Authorization: Bearer …`) and WebSocket (`?token=…`) | Authenticating the caller to this API |
+| **Microsoft (central) access token** | Microsoft Entra ID | Only once, in the `POST /login/` body | Stored server-side as `central_access_token`; used **internally** for calls to the central ERP (e.g. employee-directory search) |
+
+The Microsoft access token is captured at login and stored on the user record. Clients **never** send it again — the server attaches it automatically for central ERP calls.
+
+> **Note:** Microsoft access tokens are short-lived (~60–80 min). Once the stored `central_access_token` expires, central ERP calls (such as user search) return no results until the user logs in again with a fresh Microsoft token.
+
+### Response envelope
+All endpoints return a consistent envelope:
+```json
+{
+  "success": true,
+  "message": "Request successful",
+  "data": {},
+  "errors": null,
+  "meta": { "timestamp": "2026-07-02T09:19:04.840964Z" }
+}
+```
+
+---
+
+## Authentication API
+
+### 1. SSO Login
+**Endpoint:** `POST /login/`
+
+**Authentication:** None (public)
+
+**Description:** Verifies a Microsoft Entra ID token against the central ERP, mirrors the user locally, stores the Microsoft token as `central_access_token`, and issues this service's own JWT pair.
+
+**Body:** (send either `access_token` or `id_token`)
+```json
+{
+  "access_token": "<microsoft_access_token>",
+  "id_token": "<microsoft_id_token>",
+  "appVersion": "1.0.0",
+  "deviceId": "stable-device-uuid-from-app",
+  "fcm_token": "firebase-messaging-token",
+  "platform": "android"
+}
+```
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `access_token` | Conditional | Microsoft access token. Required if `id_token` is not provided. |
+| `id_token` | Conditional | Microsoft ID token. Required if `access_token` is not provided. |
+| `appVersion` | Optional | Client app version (logged only). |
+| `deviceId` | Optional* | Stable device ID. Required when registering for push. |
+| `fcm_token` | Optional* | Firebase Messaging token. Register device for push when provided. |
+| `platform` | Optional* | `android` or `ios`. Required when `fcm_token` is provided. |
+
+\* For push notifications, send all three together: `deviceId`, `fcm_token`, and `platform`. Login works without them (no push until they are sent on a later login).
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "SSO login successful.",
+  "data": {
+    "access_token": "<app_jwt_access_token>",
+    "refresh_token": "<app_jwt_refresh_token>",
+    "user": {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "central_id": 10007558,
+      "employee_id": "11016",
+      "name": "Md. Riyad Hossain",
+      "email": "riyad.hossain@betopiagroup.com",
+      "username": "riyad.hossain",
+      "phone": "+8801836851918",
+      "department": "Admin & Legal Management",
+      "position": "Sr. Executive, SCM",
+      "location": "",
+      "company": "Betopia Group",
+      "avatar_url": "https://erp.betopiagroup.com/web/image/hr.employee/10007558/image_256?access_token=..."
+    }
+  },
+  "errors": null,
+  "meta": { "timestamp": "2026-07-02T09:19:04.840964Z" }
+}
+```
+
+**Error responses:**
+
+| Status | When |
+| --- | --- |
+| `422` | Payload invalid (neither `access_token` nor `id_token` supplied). |
+| `401` | Microsoft token invalid or expired. |
+| `502` / `503` | Central ERP profile service unreachable **and** no stored user to fall back to. |
+
+> If the central profile service is temporarily unavailable but the user already exists locally, login succeeds using the stored profile data (the `central_access_token` is **not** refreshed in this case).
+
+---
+
+### 2. Logout
+**Endpoint:** `POST /logout/`
+
+**Authentication:** Required
+
+**Description:** Logs the logout event. This service does not maintain server-side sessions, so no token is invalidated server-side — the client should discard its stored JWTs.
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Logged out successfully.",
+  "data": null,
+  "errors": null,
+  "meta": { "timestamp": "2026-07-02T09:19:04.840964Z" }
+}
+```
+
+---
+
+### 3. Get Profile
+**Endpoint:** `GET /profile/`
+
+**Authentication:** Required
+
+**Description:** Returns the authenticated user's profile (read-only mirror of central ERP data).
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Request successful",
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "central_id": 10007558,
+    "employee_id": "11016",
+    "name": "Md. Riyad Hossain",
+    "email": "riyad.hossain@betopiagroup.com",
+    "username": "riyad.hossain",
+    "phone": "+8801836851918",
+    "department": "Admin & Legal Management",
+    "position": "Sr. Executive, SCM",
+    "location": "",
+    "company": "Betopia Group",
+    "avatar_url": "https://erp.betopiagroup.com/web/image/hr.employee/10007558/image_256?access_token=..."
+  },
+  "errors": null,
+  "meta": { "timestamp": "2026-07-02T09:19:04.840964Z" }
+}
 ```
 
 ---
@@ -760,7 +909,7 @@ Real-time notifications for reactions and future events. Two separate concepts:
 | **Badge (unread count)** | `unread_count`, `read-all` | User has not opened the notification list since these arrived |
 | **Individual read** | `is_read`, `/{id}/read/` | User opened a specific notification |
 
-Device registration for FCM is shared by chat push and future notification push — see [Push Notifications (Firebase)](#push-notifications-firebase).
+Device registration for FCM happens at **login** (`deviceId` + `fcm_token` + `platform`) — see [Push Notifications (Firebase)](#push-notifications-firebase).
 
 ---
 
@@ -999,46 +1148,35 @@ Used for alerts when the app is in the **background or closed**. In-app real-tim
 **Requirements (Flutter / mobile):**
 - Firebase project with Android + iOS apps configured
 - Real `fcm_token` from `FirebaseMessaging.instance.getToken()` (Postman fake tokens will not deliver to a phone)
-- Register token after central ERP login
+- Send `deviceId`, `fcm_token`, and `platform` in the **login** body (re-send on token refresh via login)
 - iOS: APNs key uploaded to Firebase; test on a **physical device**
 
 ---
 
-### 1. Register Device
-**Endpoint:** `POST /devices/register/`
+### 1. Register Device (via Login)
 
-**Authentication:** Required (`Authorization: Bearer <token>`)
+Device tokens are registered automatically during `POST /login/` when the client sends push fields:
 
-**Description:** Stores the device FCM token for push. Call after login and whenever the FCM token refreshes.
-
-**Body:**
 ```json
 {
-  "device_id": "stable-device-uuid-from-app",
+  "access_token": "<microsoft_access_token>",
+  "deviceId": "stable-device-uuid-from-app",
   "fcm_token": "firebase-messaging-token",
   "platform": "android"
 }
 ```
 
-| Field | Required | Values |
-|-------|----------|--------|
-| `device_id` | Yes | Stable ID per device (from Flutter) |
+| Field | Required for push | Values |
+|-------|-------------------|--------|
+| `deviceId` | Yes | Stable ID per device (from Flutter) |
 | `fcm_token` | Yes | From Firebase Messaging SDK |
 | `platform` | Yes | `android`, `ios` |
 
-**Response (200 OK):**
-```json
-{
-  "success": true,
-  "message": "Device registered."
-}
-```
+If the same `deviceId` is sent again on a later login, the token is updated.
 
-If the same `device_id` is sent again, the token is updated (`"Device updated."`).
-
-**Error Responses:**
-- `400` — missing `device_id` / `fcm_token`, or invalid `platform`
-- `401` — missing or invalid Bearer token
+**Error responses (login):**
+- `422` — push fields incomplete (e.g. `fcm_token` without `platform`)
+- `401` — Microsoft token invalid
 
 ---
 
@@ -1237,7 +1375,7 @@ Sent automatically when a **new message** is created (text via WebSocket, media 
 ```
 
 **Flutter handling:**
-1. On login → `POST /devices/register/` with real `fcm_token`
+1. On login → send `deviceId`, `fcm_token`, and `platform` in `POST /login/`
 2. On logout → `DELETE /devices/unregister/`
 3. On notification tap → parse `conv_id` from `data` → open chat screen
 4. Optionally load history: `GET /conversations/{conv_id}/messages/`
@@ -1245,7 +1383,7 @@ Sent automatically when a **new message** is created (text via WebSocket, media 
 
 **Testing notes:**
 - Postman **cannot** receive FCM on a phone — use a Flutter build with a real Firebase token
-- Register token for the **recipient** user, not the sender
+- Register token for the **recipient** user at login, not the sender
 - Put recipient app in **background** to see the system notification
 - Server log `FCM sent | success=1 failure=0` means Firebase accepted the push
 - Invalid tokens are removed automatically after failed send; re-register from the app

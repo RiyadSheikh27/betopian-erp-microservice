@@ -10,6 +10,18 @@ from .notify import get_unread_count, mark_all_seen, push_unread_count
 logger = logging.getLogger("apps.notifications")
 
 
+def register_device(user, device_id, fcm_token, platform):
+    """Store or update FCM token for push notifications (called from login)."""
+    from .models import DeviceToken
+
+    obj, _ = DeviceToken.objects.update_or_create(
+        user=user,
+        device_id=device_id,
+        defaults={"fcm_token": fcm_token, "platform": platform},
+    )
+    DeviceToken.objects.filter(fcm_token=fcm_token).exclude(pk=obj.pk).delete()
+
+
 def _serialize(items):
     rows = []
     for n in items:
@@ -110,42 +122,6 @@ class NotificationDeleteView(APIView):
             data={"unread_count": get_unread_count(request.user)},
             message="Notification deleted.",
         )
-
-class DeviceRegisterView(APIView):
-    """Register a device token for push notifications."""
-    
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        device_id = request.data.get("device_id", "").strip()
-        fcm_token = request.data.get("fcm_token", "").strip()
-        platform = request.data.get("platform", "").lower()
-
-        if not device_id or not fcm_token:
-            return APIResponse.error(
-                errors={"detail": "device_id and fcm_token are required."},
-                status_code=400,
-            )
-        if platform not in ("android", "ios"):
-            return APIResponse.error(
-                errors={"platform": "Use android or ios."},
-                status_code=400,
-            )
-
-        from .models import DeviceToken
-
-        obj, created = DeviceToken.objects.update_or_create(
-            user=request.user,
-            device_id=device_id,
-            defaults={"fcm_token": fcm_token, "platform": platform},
-        )
-        # Same token moved to another user (re-login on same phone)
-        DeviceToken.objects.filter(fcm_token=fcm_token).exclude(pk=obj.pk).delete()
-
-        return APIResponse.success(
-            message="Device registered." if created else "Device updated."
-        )
-
 
 class DeviceUnregisterView(APIView):
     permission_classes = [IsAuthenticated]
