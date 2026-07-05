@@ -9,7 +9,12 @@ from apps.utils.throttles import AuthThrottle
 from apps.utils.response import APIResponse
 from .models import User
 from .serializers import SSOLoginSerializer, UserProfileSerializer
-from .utils import SSOServiceError, decode_ms_claims, fetch_central_profile
+from .utils import (
+    SSOServiceError,
+    decode_ms_claims,
+    fetch_central_profile,
+    sync_user_from_profile,
+)
 
 logger = logging.getLogger("apps.authentication")
 
@@ -35,6 +40,9 @@ class SSOLoginView(APIView):
 
         ms_claims = decode_ms_claims(ms_token)
         azure_oid = ms_claims.get("oid")
+        profile = None
+        created = False
+        changed = set()
 
         try:
             profile = fetch_central_profile(ms_token)
@@ -57,27 +65,11 @@ class SSOLoginView(APIView):
                 "Central profile unavailable, using stored data | email=%s", user.email
             )
         else:
-            fields = {
-                "central_id": profile["id"],
-                "employee_id": profile["employee_id"],
-                "name": profile.get("name", ""),
-                "email": profile["email"],
-                "username": profile["email"].split("@")[0],
-                "phone": profile.get("phone", ""),
-                "department": profile.get("department", ""),
-                "position": profile.get("position", ""),
-                "location": profile.get("address", ""),
-                "company": profile.get("company") or profile.get("company_name", ""),
-                "avatar_url": profile.get("avatar_url", ""),
-                "central_access_token": ms_token,
-                "is_active": True,
-            }
-            user, created = User.objects.update_or_create(
-                central_id=fields["central_id"], defaults=fields
-            )
-            logger.info(
-                "SSO user %s | email=%s", "created" if created else "updated", user.email
-            )
+            user, created, changed = sync_user_from_profile(profile, token=ms_token)
+            if created:
+                logger.info("SSO user created | email=%s", user.email)
+            else:
+                logger.info("SSO user synced | email=%s", user.email)
 
         if not azure_oid:
             azure_oid = str(user.central_id)
@@ -99,6 +91,12 @@ class SSOLoginView(APIView):
                 data["platform"],
             )
             logger.info("Device registered for push | user=%s device=%s", user.pk, data["deviceId"])
+
+        from apps.contents.tasks import enqueue_community_assignment
+
+        enqueue_community_assignment(
+            user, profile, created=created, changed_fields=changed
+        )
 
         access = AccessToken()
         access["uid"] = azure_oid

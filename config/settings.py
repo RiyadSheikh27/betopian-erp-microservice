@@ -351,6 +351,19 @@ SPECTACULAR_SETTINGS = {
 }
 
 
+""" Celery - async tasks (broker on Redis DB 2 by default) """
+
+_redis_url = config("REDIS_URL", default="redis://127.0.0.1:6379/1")
+CELERY_BROKER_URL = config(
+    "CELERY_BROKER_URL", default=_redis_url.rsplit("/", 1)[0] + "/2"
+)
+CELERY_RESULT_BACKEND = config("CELERY_RESULT_BACKEND", default=CELERY_BROKER_URL)
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = TIME_ZONE
+
+
 """ Cache - Redis Backend """
 
 CACHES = {

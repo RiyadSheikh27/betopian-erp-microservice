@@ -159,7 +159,6 @@ def map_employee(employee):
         "avatar_url": avatar_url,
         "is_online": False,
         "central_access_token": "",
-        "community_assigned_at": None,
         "is_active": True,
         "is_staff": False,
         "password": None,

@@ -61,9 +61,6 @@ class User(AbstractBaseUser, PermissionsMixin):
     # Stored for use by other ERP services within the same app
     central_access_token = models.TextField(blank=True)
 
-    # Community assigned section
-    community_assigned_at = models.DateTimeField(blank=True, null=True, default=None)
-
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
