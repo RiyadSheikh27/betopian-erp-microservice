@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt.token_blacklist",
     "drf_spectacular",
     "channels",
+    "storages",
     # Local apps
     "apps.apis",
     "apps.utils",
@@ -161,6 +162,42 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+USE_S3 = config("USE_S3", default=False, cast=bool)
+
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "OPTIONS": {
+            "location": MEDIA_ROOT,
+            "base_url": MEDIA_URL,
+        },
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
+
+if USE_S3:
+    AWS_ACCESS_KEY_ID = config("AWS_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY = config("AWS_SECRET_ACCESS_KEY")
+    AWS_STORAGE_BUCKET_NAME = config("AWS_STORAGE_BUCKET_NAME")
+    AWS_S3_ENDPOINT_URL = config("AWS_S3_ENDPOINT_URL")
+    AWS_S3_SIGNATURE_VERSION = config("AWS_S3_SIGNATURE_VERSION", default="s3v4")
+    AWS_S3_REGION_NAME = config("AWS_S3_REGION_NAME", default="us-east-1")
+    AWS_S3_ADDRESSING_STYLE = config("AWS_S3_ADDRESSING_STYLE", default="path")
+    AWS_S3_FILE_OVERWRITE = False
+    AWS_DEFAULT_ACL = None
+    AWS_QUERYSTRING_AUTH = config("AWS_QUERYSTRING_AUTH", default=True, cast=bool)
+    AWS_S3_OBJECT_PARAMETERS = {"CacheControl": "max-age=86400"}
+
+    custom_domain = config("AWS_S3_CUSTOM_DOMAIN", default="")
+    if custom_domain:
+        AWS_S3_CUSTOM_DOMAIN = custom_domain
+
+    STORAGES["default"] = {
+        "BACKEND": "storages.backends.s3.S3Storage",
+    }
+
 
 """ Default primary key field type """
 
@@ -232,6 +269,9 @@ AVATAR_MAX_DIMENSION = config("AVATAR_MAX_DIMENSION", default=400, cast=int)
 CHAT_IMAGE_MAX_SIZE_MB = config("CHAT_IMAGE_MAX_SIZE_MB", default=10, cast=int)
 CHAT_VIDEO_MAX_SIZE_MB = config("CHAT_VIDEO_MAX_SIZE_MB", default=200, cast=int)
 CHAT_DOC_MAX_SIZE_MB = config("CHAT_DOC_MAX_SIZE_MB", default=50, cast=int)
+
+""" 1:1 voice/video calls """
+CALL_RING_TIMEOUT_SECONDS = config("CALL_RING_TIMEOUT_SECONDS", default=45, cast=int)
 
 """ Gunicorn - recommended settings for production (used in gunicorn.conf.py) """
 

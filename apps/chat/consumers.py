@@ -1,8 +1,10 @@
 import json
 import logging
-from channels.generic.websocket import AsyncWebsocketConsumer
+
 from channels.db import database_sync_to_async
+from channels.generic.websocket import AsyncWebsocketConsumer
 from django.utils import timezone
+
 from .push import notify_chat_message
 
 logger = logging.getLogger("apps.chat")
@@ -10,17 +12,8 @@ logger = logging.getLogger("apps.chat")
 
 class ChatConsumer(AsyncWebsocketConsumer):
     """
-    Handles all real-time chat events for both DM and group conversations.
-
-    Text messages - WebSocket only
-    Media/files - HTTP POST then media_sent via WebSocket
-    Edit/Delete - WebSocket only
-    Reactions - WebSocket only
-    Typing/Read - WebSocket only
-    Presence - auto on connect/disconnect
-    Calling - WebRTC signaling via WebSocket (DM only)
-    call_invite - call_accept/call_decline/call_missed
-    - offer - answer - ice_candidate - call_end
+    Real-time chat for DM and group conversations.
+    Text / typing / read / edit / delete / reactions — not calls (see CallConsumer).
     """
 
     async def connect(self):
@@ -66,7 +59,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return
 
         handlers = {
-            # Chat
             "message": self._handle_message,
             "media_sent": self._handle_media_sent,
             "typing": self._handle_typing,
@@ -74,22 +66,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
             "edit": self._handle_edit,
             "delete": self._handle_delete,
             "react": self._handle_react,
-            # Calling
-            "call_invite": self._handle_call_invite,
-            "call_accept": self._handle_call_accept,
-            "call_decline": self._handle_call_decline,
-            "call_missed": self._handle_call_missed,
-            "call_end": self._handle_call_end,
-            # WebRTC signaling
-            "offer": self._handle_offer,
-            "answer": self._handle_answer,
-            "ice_candidate": self._handle_ice_candidate,
         }
         handler = handlers.get(data.get("type"))
         if handler:
             await handler(data)
-
-    # Chat handlers
 
     async def _handle_message(self, data):
         body = data.get("body", "").strip()
@@ -182,123 +162,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 self.room, {"type": "reaction_updated", "data": result}
             )
 
-    # Call handlers
-
-    async def _handle_call_invite(self, data):
-        """
-        Caller initiates a call.
-        Broadcasts ring event to the other participant.
-        """
-        call_type = data.get("call_type", "audio")  # audio | video
-        if call_type not in ("audio", "video"):
-            return
-
-        await self.channel_layer.group_send(
-            self.room,
-            {
-                "type": "call_invite",
-                "caller_id": str(self.user.id),
-                "caller_name": self.user.name,
-                "caller_avatar": self.user.avatar_url,
-                "call_type": call_type,
-            },
-        )
-
-    async def _handle_call_accept(self, data):
-        """Receiver accepts — notify caller to start WebRTC negotiation."""
-        await self.channel_layer.group_send(
-            self.room,
-            {
-                "type": "call_accept",
-                "receiver_id": str(self.user.id),
-            },
-        )
-
-    async def _handle_call_decline(self, data):
-        """Receiver declines — save declined call log."""
-        call_type = data.get("call_type", "audio")
-        await self._save_call_log(call_type, "declined", 0)
-        await self.channel_layer.group_send(
-            self.room,
-            {
-                "type": "call_decline",
-                "receiver_id": str(self.user.id),
-            },
-        )
-
-    async def _handle_call_missed(self, data):
-        """
-        Caller cancels after no answer — save missed call log.
-        Called by caller after ring timeout.
-        """
-        call_type = data.get("call_type", "audio")
-        await self._save_call_log(call_type, "missed", 0)
-        await self.channel_layer.group_send(
-            self.room,
-            {
-                "type": "call_missed",
-                "caller_id": str(self.user.id),
-                "call_type": call_type,
-            },
-        )
-
-    async def _handle_call_end(self, data):
-        """
-        Either party ends the call.
-        Caller/receiver sends duration in seconds.
-        """
-        call_type = data.get("call_type", "audio")
-        duration = int(data.get("duration", 0))
-        await self._save_call_log(call_type, "completed", duration)
-        await self.channel_layer.group_send(
-            self.room,
-            {
-                "type": "call_end",
-                "user_id": str(self.user.id),
-                "duration": duration,
-            },
-        )
-
-    # WebRTC signaling handlers
-    # These just relay SDP/ICE between the two peers via the channel group.
-    # Server never inspects the WebRTC payload — pure relay.
-
-    async def _handle_offer(self, data):
-        """Caller sends SDP offer to receiver."""
-        await self.channel_layer.group_send(
-            self.room,
-            {
-                "type": "webrtc_offer",
-                "sdp": data.get("sdp"),
-                "sender_id": str(self.user.id),
-            },
-        )
-
-    async def _handle_answer(self, data):
-        """Receiver sends SDP answer back to caller."""
-        await self.channel_layer.group_send(
-            self.room,
-            {
-                "type": "webrtc_answer",
-                "sdp": data.get("sdp"),
-                "sender_id": str(self.user.id),
-            },
-        )
-
-    async def _handle_ice_candidate(self, data):
-        """Relay ICE candidate between peers."""
-        await self.channel_layer.group_send(
-            self.room,
-            {
-                "type": "webrtc_ice",
-                "candidate": data.get("candidate"),
-                "sender_id": str(self.user.id),
-            },
-        )
-
-    # Group - client broadcast handlers
-    # These are called when a message is sent to the group.
-
     async def chat_message(self, event):
         await self.send(
             text_data=json.dumps({"type": "message", "data": event["data"]})
@@ -353,156 +216,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
             text_data=json.dumps({"type": "reaction_updated", "data": event["data"]})
         )
 
-    # Call broadcast handlers
-    async def call_invite(self, event):
-        await self.send(
-            text_data=json.dumps(
-                {
-                    "type": "call_invite",
-                    "caller_id": event["caller_id"],
-                    "caller_name": event["caller_name"],
-                    "caller_avatar": event["caller_avatar"],
-                    "call_type": event["call_type"],
-                }
-            )
-        )
-
-    async def call_accept(self, event):
-        await self.send(
-            text_data=json.dumps(
-                {
-                    "type": "call_accept",
-                    "receiver_id": event["receiver_id"],
-                }
-            )
-        )
-
-    async def call_decline(self, event):
-        await self.send(
-            text_data=json.dumps(
-                {
-                    "type": "call_decline",
-                    "receiver_id": event["receiver_id"],
-                }
-            )
-        )
-
-    async def call_missed(self, event):
-        await self.send(
-            text_data=json.dumps(
-                {
-                    "type": "call_missed",
-                    "caller_id": event["caller_id"],
-                    "call_type": event["call_type"],
-                }
-            )
-        )
-
-    async def call_end(self, event):
-        await self.send(
-            text_data=json.dumps(
-                {
-                    "type": "call_end",
-                    "user_id": event["user_id"],
-                    "duration": event["duration"],
-                }
-            )
-        )
-
-    # WebRTC relay handlers
-    async def webrtc_offer(self, event):
-        await self.send(
-            text_data=json.dumps(
-                {
-                    "type": "offer",
-                    "sdp": event["sdp"],
-                    "sender_id": event["sender_id"],
-                }
-            )
-        )
-
-    async def webrtc_answer(self, event):
-        await self.send(
-            text_data=json.dumps(
-                {
-                    "type": "answer",
-                    "sdp": event["sdp"],
-                    "sender_id": event["sender_id"],
-                }
-            )
-        )
-
-    async def webrtc_ice(self, event):
-        await self.send(
-            text_data=json.dumps(
-                {
-                    "type": "ice_candidate",
-                    "candidate": event["candidate"],
-                    "sender_id": event["sender_id"],
-                }
-            )
-        )
-
-    # DB operations
-
     def _build_url(self, relative_url):
         headers = dict(self.scope.get("headers", []))
         host = headers.get(b"host", b"localhost").decode()
         scheme = "https" if self.scope.get("scheme") in ("wss", "https") else "http"
         return f"{scheme}://{host}{relative_url}"
-
-    @database_sync_to_async
-    def _save_call_log(self, call_type, status, duration):
-        """Save call as a Message (type=call) + CallLog record."""
-        from .models import Message, CallLog, Conversation, ConversationParticipant
-
-        conv = Conversation.objects.get(pk=self.conv_id)
-
-        # Get the other participant
-        other = (
-            ConversationParticipant.objects.filter(conversation=conv)
-            .exclude(user=self.user)
-            .select_related("user")
-            .first()
-        )
-        if not other:
-            return
-
-        # Build human-readable call message body
-        status_labels = {
-            "completed": f"{'📹' if call_type == 'video' else '📞'} {call_type.capitalize()} call • {_format_duration(duration)}",
-            "missed": f"{'📹' if call_type == 'video' else '📞'} Missed {call_type} call",
-            "declined": f"{'📹' if call_type == 'video' else '📞'} {call_type.capitalize()} call declined",
-        }
-        body = status_labels.get(status, "Call")
-
-        msg = Message.objects.create(
-            conversation=conv,
-            sender=self.user,
-            type=Message.Type.CALL,
-            body=body,
-        )
-
-        # Determine caller/receiver
-        is_caller = status in (
-            "missed",
-        )  # caller sends missed, receiver sends declined
-        caller = self.user if status != "declined" else other.user
-        receiver = other.user if status != "declined" else self.user
-
-        CallLog.objects.create(
-            conversation=conv,
-            caller=caller,
-            receiver=receiver,
-            call_type=call_type,
-            status=status,
-            duration=duration,
-            message=msg,
-        )
-
-        Conversation.objects.filter(pk=self.conv_id).update(
-            last_message=msg, last_activity=timezone.now()
-        )
 
     @database_sync_to_async
     def _save_message(self, body, reply_to_id=None):
@@ -648,8 +366,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def _toggle_reaction(self, msg_id, reaction):
-        from .models import MessageReaction
         from django.db.models import Count
+
+        from .models import MessageReaction
 
         if reaction not in MessageReaction.Reaction.values:
             return None
@@ -710,8 +429,132 @@ class ChatConsumer(AsyncWebsocketConsumer):
         ).update(is_read=True, is_delivered=True, read_at=timezone.now())
 
 
-def _format_duration(seconds):
-    """Convert seconds to human readable mm:ss or hh:mm:ss."""
-    if seconds < 3600:
-        return f"{seconds // 60}:{seconds % 60:02d}"
-    return f"{seconds // 3600}:{(seconds % 3600) // 60:02d}:{seconds % 60:02d}"
+class CallConsumer(AsyncWebsocketConsumer):
+    """
+    WebRTC signaling for one call session.
+    REST handles ring/accept/decline/end; this socket relays SDP + ICE only.
+    """
+
+    async def connect(self):
+        self.call_id = self.scope["url_route"]["kwargs"]["call_id"]
+        self.room = f"call_{self.call_id}"
+        self.user = self.scope["user"]
+
+        if not self.user or not self.user.is_authenticated:
+            await self.close()
+            return
+
+        allowed, active = await self._can_join()
+        if not allowed:
+            await self.close()
+            return
+        if not active:
+            await self.close(code=4001)
+            return
+
+        await self.channel_layer.group_add(self.room, self.channel_name)
+        await self.accept()
+
+    async def disconnect(self, code):
+        if hasattr(self, "room"):
+            await self.channel_layer.group_discard(self.room, self.channel_name)
+
+    async def receive(self, text_data):
+        try:
+            data = json.loads(text_data)
+        except json.JSONDecodeError:
+            return
+
+        msg_type = data.get("type")
+        if msg_type == "ping":
+            await self.send(text_data=json.dumps({"type": "pong"}))
+            return
+
+        if msg_type not in ("offer", "answer", "ice_candidate"):
+            return
+
+        active = await self._session_active()
+        if not active:
+            return
+
+        relay_type = {
+            "offer": "webrtc_offer",
+            "answer": "webrtc_answer",
+            "ice_candidate": "webrtc_ice",
+        }[msg_type]
+
+        await self.channel_layer.group_send(
+            self.room,
+            {
+                "type": relay_type,
+                "sender_id": str(self.user.id),
+                "sdp": data.get("sdp"),
+                "candidate": data.get("candidate"),
+            },
+        )
+
+    async def call_state(self, event):
+        await self.send(text_data=json.dumps(event["payload"]))
+
+    async def webrtc_offer(self, event):
+        if event["sender_id"] == str(self.user.id):
+            return
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "offer",
+                    "sdp": event.get("sdp"),
+                    "sender_id": event["sender_id"],
+                }
+            )
+        )
+
+    async def webrtc_answer(self, event):
+        if event["sender_id"] == str(self.user.id):
+            return
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "answer",
+                    "sdp": event.get("sdp"),
+                    "sender_id": event["sender_id"],
+                }
+            )
+        )
+
+    async def webrtc_ice(self, event):
+        if event["sender_id"] == str(self.user.id):
+            return
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "ice_candidate",
+                    "candidate": event.get("candidate"),
+                    "sender_id": event["sender_id"],
+                }
+            )
+        )
+
+    @database_sync_to_async
+    def _can_join(self):
+        from .models import CallSession
+
+        try:
+            session = CallSession.objects.get(pk=self.call_id)
+        except CallSession.DoesNotExist:
+            return False, False
+
+        if self.user.id not in (session.caller_id, session.callee_id):
+            return False, False
+
+        active = session.status in CallSession.ACTIVE_STATUSES
+        return True, active
+
+    @database_sync_to_async
+    def _session_active(self):
+        from .models import CallSession
+
+        return CallSession.objects.filter(
+            pk=self.call_id,
+            status__in=CallSession.ACTIVE_STATUSES,
+        ).exists()

@@ -28,3 +28,7 @@ class NotificationConsumer(AsyncWebsocketConsumer):
 
     async def notification_event(self, event):
         await self.send(text_data=json.dumps(event["envelope"]))
+
+    async def call_signal(self, event):
+        """Incoming / lifecycle call events while the app is open."""
+        await self.send(text_data=json.dumps(event["envelope"]))

@@ -43,6 +43,13 @@ from apps.chat.views import (
     MessageReactionListView,
     ConversationMediaView,
     TurnCredentialsView,
+    CallInitiateView,
+    CallDetailView,
+    CallAcceptView,
+    CallDeclineView,
+    CallCancelView,
+    CallConnectedView,
+    CallEndView,
 )
 from apps.notifications.views import DeviceRegisterView, DeviceUnregisterView
     
@@ -150,9 +157,17 @@ chat_urlpatterns = [
 
     # Shared media gallery
     path("conversations/<uuid:conv_id>/media/", ConversationMediaView.as_view(), name="chat-media"),
-    
-    # add to urlpatterns:
+
     path("turn-credentials/", TurnCredentialsView.as_view(), name="turn-credentials"),
+
+    # 1:1 voice/video calls (WhatsApp-style — REST lifecycle + dedicated WS for WebRTC)
+    path("calls/initiate/", CallInitiateView.as_view(), name="call-initiate"),
+    path("calls/<uuid:call_id>/", CallDetailView.as_view(), name="call-detail"),
+    path("calls/<uuid:call_id>/accept/", CallAcceptView.as_view(), name="call-accept"),
+    path("calls/<uuid:call_id>/decline/", CallDeclineView.as_view(), name="call-decline"),
+    path("calls/<uuid:call_id>/cancel/", CallCancelView.as_view(), name="call-cancel"),
+    path("calls/<uuid:call_id>/connected/", CallConnectedView.as_view(), name="call-connected"),
+    path("calls/<uuid:call_id>/end/", CallEndView.as_view(), name="call-end"),
 ]
 
 urlpatterns = [

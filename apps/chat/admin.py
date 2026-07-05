@@ -8,6 +8,7 @@ from .models import (
     MessageReaction,
     MessageStatus,
     CallLog,
+    CallSession,
 )
 
 @admin.register(
@@ -18,6 +19,7 @@ from .models import (
     MessageReaction,
     MessageStatus,
     CallLog,
+    CallSession,
 )
 class ChatAdmin(admin.ModelAdmin):
     list_per_page = 50
@@ -99,6 +101,18 @@ class ChatAdmin(admin.ModelAdmin):
                 "created_at",
             )
 
+        if model == CallSession:
+            return (
+                "id",
+                "caller",
+                "callee",
+                "call_type",
+                "status",
+                "duration",
+                "created_at",
+                "ended_at",
+            )
+
         return ("id",)
 
     def get_list_filter(self, request):
@@ -120,6 +134,9 @@ class ChatAdmin(admin.ModelAdmin):
             return ("is_delivered", "is_read", "created_at")
 
         if model == CallLog:
+            return ("call_type", "status", "created_at")
+
+        if model == CallSession:
             return ("call_type", "status", "created_at")
 
         return ("created_at",)

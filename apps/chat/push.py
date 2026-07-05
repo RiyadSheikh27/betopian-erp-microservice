@@ -57,3 +57,30 @@ def notify_chat_message(conv_id, sender, msg_data):
                 "payload": payload,
             },
         )
+
+
+def notify_incoming_call(session, caller):
+    """Wake callee when app is backgrounded - high-priority FCM data push."""
+    call_type = session.call_type
+    label = "Video call" if call_type == "video" else "Voice call"
+    send_to_user(
+        session.callee_id,
+        title=caller.name,
+        body=f"Incoming {label.lower()}",
+        high_priority=True,
+        data={
+            "type": "incoming_call",
+            "call_id": str(session.id),
+            "conv_id": str(session.conversation_id),
+            "caller_id": str(caller.id),
+            "caller_name": caller.name,
+            "caller_avatar": caller.avatar_url or "",
+            "call_type": call_type,
+        },
+    )
+    logger.info(
+        "Incoming call push | call=%s caller=%s callee=%s",
+        session.id,
+        caller.id,
+        session.callee_id,
+    )

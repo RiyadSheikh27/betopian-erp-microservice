@@ -378,11 +378,17 @@ class CommentListCreateView(APIView):
         # Verify target exists
         try:
             if target_type == "media":
-                model.objects.get(pk=pk, post__privacy=Post.Privacy.PUBLIC)
+                target = model.objects.select_related("post__author").get(
+                    pk=pk, post__privacy=Post.Privacy.PUBLIC
+                )
             elif target_type == "post":
-                model.objects.get(pk=pk, privacy=Post.Privacy.PUBLIC)
+                target = model.objects.select_related("author").get(
+                    pk=pk, privacy=Post.Privacy.PUBLIC
+                )
             elif target_type == "reel":
-                model.objects.get(pk=pk, privacy=Reel.Privacy.PUBLIC)
+                target = model.objects.select_related("author").get(
+                    pk=pk, privacy=Reel.Privacy.PUBLIC
+                )
         except model.DoesNotExist:
             return APIResponse.error(message="Target not found.", status_code=404)
 
@@ -412,6 +418,10 @@ class CommentListCreateView(APIView):
             comment.pk,
             comment.parent_id,
         )
+
+        from apps.notifications.notify import notify_comment
+
+        notify_comment(request.user, comment, target_type, target)
 
         return APIResponse.success(
             data=CommentSerializer(comment).data,

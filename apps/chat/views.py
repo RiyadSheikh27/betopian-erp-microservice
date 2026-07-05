@@ -1,5 +1,11 @@
 import logging
+from datetime import timedelta
+
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.db import transaction
 from django.db.models import Count, Q, Subquery, OuterRef
 from django.utils import timezone
 from rest_framework.views import APIView
@@ -22,7 +28,10 @@ from .models import (
     MessageMedia,
     MessageReaction,
     MessageStatus,
+    CallSession,
+    CallLog,
 )
+from .push import notify_incoming_call
 from .serializers import (
     ConversationSerializer,
     MessageSerializer,
@@ -494,6 +503,376 @@ class ConversationMediaView(APIView):
                 media, many=True, context={"request": request}
             ).data
         )
+
+
+""" 1:1 Calls (REST lifecycle + push) """
+
+User = get_user_model()
+
+_CALL_LOG_STATUS = {
+    CallSession.Status.ENDED: CallLog.CallStatus.COMPLETED,
+    CallSession.Status.MISSED: CallLog.CallStatus.MISSED,
+    CallSession.Status.DECLINED: CallLog.CallStatus.DECLINED,
+    CallSession.Status.CANCELLED: CallLog.CallStatus.CANCELLED,
+}
+
+
+def _format_call_duration(seconds):
+    if seconds < 3600:
+        return f"{seconds // 60}:{seconds % 60:02d}"
+    return f"{seconds // 3600}:{(seconds % 3600) // 60:02d}:{seconds % 60:02d}"
+
+
+def _serialize_call(session):
+    return {
+        "id": str(session.id),
+        "conv_id": str(session.conversation_id),
+        "caller_id": str(session.caller_id),
+        "callee_id": str(session.callee_id),
+        "call_type": session.call_type,
+        "status": session.status,
+        "duration": session.duration,
+        "created_at": session.created_at.isoformat(),
+        "ended_at": session.ended_at.isoformat() if session.ended_at else None,
+    }
+
+
+def _call_channel(call_id):
+    return f"call_{call_id}"
+
+
+def _broadcast_call(call_id, payload):
+    layer = get_channel_layer()
+    if not layer:
+        return
+    async_to_sync(layer.group_send)(
+        _call_channel(call_id),
+        {"type": "call_state", "payload": payload},
+    )
+
+
+def _signal_user(user_id, payload):
+    layer = get_channel_layer()
+    if not layer:
+        return
+    async_to_sync(layer.group_send)(
+        f"notify_{user_id}",
+        {"type": "call_signal", "envelope": payload},
+    )
+
+
+def _expire_stale_ringing():
+    """Auto-miss calls that ring too long (no Celery required)."""
+    cutoff = timezone.now() - timedelta(
+        seconds=django_settings.CALL_RING_TIMEOUT_SECONDS
+    )
+    stale = CallSession.objects.filter(
+        status=CallSession.Status.RINGING, created_at__lt=cutoff
+    ).select_related("caller", "callee", "conversation")
+    for session in stale:
+        finalize_call(session, CallSession.Status.MISSED)
+
+
+def _user_busy(user):
+    return CallSession.objects.filter(
+        Q(caller=user) | Q(callee=user),
+        status__in=CallSession.ACTIVE_STATUSES,
+    ).exists()
+
+
+def _get_call_for_user(call_id, user, for_update=False):
+    qs = CallSession.objects.select_related("caller", "callee", "conversation")
+    if for_update:
+        qs = qs.select_for_update()
+    try:
+        session = qs.get(pk=call_id)
+    except CallSession.DoesNotExist:
+        return None
+    if user.id not in (session.caller_id, session.callee_id):
+        return None
+    return session
+
+
+def finalize_call(session, new_status, duration=0):
+    """
+    Move call to a terminal state once. Creates chat CallLog + call message.
+    Returns the updated session, or None if transition is invalid.
+    """
+    if new_status not in CallSession.TERMINAL_STATUSES:
+        return None
+
+    with transaction.atomic():
+        session = (
+            CallSession.objects.select_for_update()
+            .select_related("caller", "callee", "conversation")
+            .filter(pk=session.pk)
+            .first()
+        )
+        if not session or session.status in CallSession.TERMINAL_STATUSES:
+            return session
+        if session.status not in CallSession.ACTIVE_STATUSES:
+            return None
+
+        session.status = new_status
+        session.duration = max(int(duration or 0), 0)
+        session.ended_at = timezone.now()
+        session.save(update_fields=["status", "duration", "ended_at", "updated_at"])
+
+        if session.call_log_id:
+            return session
+
+        log_status = _CALL_LOG_STATUS[new_status]
+        call_type = session.call_type
+        labels = {
+            CallLog.CallStatus.COMPLETED: (
+                f"{'📹' if call_type == 'video' else '📞'} {call_type.capitalize()} call"
+                f" • {_format_call_duration(session.duration)}"
+            ),
+            CallLog.CallStatus.MISSED: (
+                f"{'📹' if call_type == 'video' else '📞'} Missed {call_type} call"
+            ),
+            CallLog.CallStatus.DECLINED: (
+                f"{'📹' if call_type == 'video' else '📞'} {call_type.capitalize()} call declined"
+            ),
+            CallLog.CallStatus.CANCELLED: (
+                f"{'📹' if call_type == 'video' else '📞'} Cancelled {call_type} call"
+            ),
+        }
+        body = labels.get(log_status, "Call")
+        sender = session.caller if log_status != CallLog.CallStatus.DECLINED else session.callee
+
+        msg = Message.objects.create(
+            conversation=session.conversation,
+            sender=sender,
+            type=Message.Type.CALL,
+            body=body,
+        )
+        log = CallLog.objects.create(
+            conversation=session.conversation,
+            caller=session.caller,
+            receiver=session.callee,
+            call_type=call_type,
+            status=log_status,
+            duration=session.duration,
+            message=msg,
+        )
+        session.call_log = log
+        session.save(update_fields=["call_log", "updated_at"])
+
+        Conversation.objects.filter(pk=session.conversation_id).update(
+            last_message=msg, last_activity=timezone.now()
+        )
+
+    payload = {"type": "call_ended", "call": _serialize_call(session)}
+    _broadcast_call(session.id, payload)
+    _signal_user(session.caller_id, payload)
+    _signal_user(session.callee_id, payload)
+    return session
+
+
+class CallInitiateView(APIView):
+    """Start a 1:1 call from anywhere - not tied to an open chat WebSocket."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        _expire_stale_ringing()
+
+        callee_id = request.data.get("callee_id")
+        call_type = (request.data.get("call_type") or "audio").lower()
+        if call_type not in ("audio", "video"):
+            return APIResponse.error(
+                errors={"call_type": "Use audio or video."}, status_code=400
+            )
+        if not callee_id:
+            return APIResponse.error(
+                errors={"callee_id": "Required."}, status_code=400
+            )
+        if str(callee_id) == str(request.user.id):
+            return APIResponse.error(message="Cannot call yourself.", status_code=400)
+
+        try:
+            callee = User.objects.get(pk=callee_id, is_active=True)
+        except User.DoesNotExist:
+            return APIResponse.error(message="User not found.", status_code=404)
+
+        if _user_busy(request.user) or _user_busy(callee):
+            return APIResponse.error(message="User is busy on another call.", status_code=409)
+
+        conv, _ = _get_or_create_dm(request.user, callee)
+        session = CallSession.objects.create(
+            conversation=conv,
+            caller=request.user,
+            callee=callee,
+            call_type=call_type,
+            status=CallSession.Status.RINGING,
+        )
+
+        notify_incoming_call(session, request.user)
+        ring_payload = {
+            "type": "incoming_call",
+            "call": _serialize_call(session),
+            "caller": {
+                "id": str(request.user.id),
+                "name": request.user.name,
+                "avatar_url": request.user.avatar_url or "",
+            },
+        }
+        _signal_user(callee.id, ring_payload)
+
+        logger.info(
+            "Call initiated | call=%s caller=%s callee=%s type=%s",
+            session.id,
+            request.user.id,
+            callee.id,
+            call_type,
+        )
+        return APIResponse.success(
+            data={
+                "call": _serialize_call(session),
+                "caller": {
+                    "id": str(request.user.id),
+                    "name": request.user.name,
+                    "avatar_url": request.user.avatar_url or "",
+                },
+                "callee": {
+                    "id": str(callee.id),
+                    "name": callee.name,
+                    "avatar_url": callee.avatar_url or "",
+                },
+            },
+            message="Call ringing.",
+            status_code=201,
+        )
+
+
+class CallDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, call_id):
+        _expire_stale_ringing()
+        session = _get_call_for_user(call_id, request.user)
+        if not session:
+            return APIResponse.error(message="Call not found.", status_code=404)
+        return APIResponse.success(data={"call": _serialize_call(session)})
+
+
+class CallAcceptView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, call_id):
+        with transaction.atomic():
+            session = _get_call_for_user(call_id, request.user, for_update=True)
+            if not session:
+                return APIResponse.error(message="Call not found.", status_code=404)
+            if session.callee_id != request.user.id:
+                return APIResponse.error(message="Only the callee can accept.", status_code=403)
+            if session.status != CallSession.Status.RINGING:
+                return APIResponse.error(
+                    message=f"Call is already {session.status}.", status_code=409
+                )
+            session.status = CallSession.Status.ACCEPTED
+            session.save(update_fields=["status", "updated_at"])
+
+        payload = {
+            "type": "call_accepted",
+            "call": _serialize_call(session),
+            "accepted_by": str(request.user.id),
+        }
+        _broadcast_call(session.id, payload)
+        _signal_user(session.caller_id, payload)
+        _signal_user(session.callee_id, payload)
+        logger.info("Call accepted | call=%s callee=%s", call_id, request.user.id)
+        return APIResponse.success(data={"call": _serialize_call(session)})
+
+
+class CallDeclineView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, call_id):
+        session = _get_call_for_user(call_id, request.user)
+        if not session:
+            return APIResponse.error(message="Call not found.", status_code=404)
+        if session.callee_id != request.user.id:
+            return APIResponse.error(message="Only the callee can decline.", status_code=403)
+        if session.status != CallSession.Status.RINGING:
+            return APIResponse.error(
+                message=f"Call is already {session.status}.", status_code=409
+            )
+        session = finalize_call(session, CallSession.Status.DECLINED)
+        logger.info("Call declined | call=%s", call_id)
+        return APIResponse.success(data={"call": _serialize_call(session)})
+
+
+class CallCancelView(APIView):
+    """Caller cancels while ringing → missed for the callee."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, call_id):
+        session = _get_call_for_user(call_id, request.user)
+        if not session:
+            return APIResponse.error(message="Call not found.", status_code=404)
+        if session.caller_id != request.user.id:
+            return APIResponse.error(message="Only the caller can cancel.", status_code=403)
+        if session.status != CallSession.Status.RINGING:
+            return APIResponse.error(
+                message=f"Call is already {session.status}.", status_code=409
+            )
+        session = finalize_call(session, CallSession.Status.MISSED)
+        logger.info("Call cancelled/missed | call=%s", call_id)
+        return APIResponse.success(data={"call": _serialize_call(session)})
+
+
+class CallConnectedView(APIView):
+    """Optional — client reports WebRTC media connected (for analytics / UI)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, call_id):
+        session = _get_call_for_user(call_id, request.user)
+        if not session:
+            return APIResponse.error(message="Call not found.", status_code=404)
+        if session.status not in (
+            CallSession.Status.ACCEPTED,
+            CallSession.Status.CONNECTED,
+        ):
+            return APIResponse.error(
+                message=f"Call is {session.status}, not ready.", status_code=409
+            )
+        if session.status != CallSession.Status.CONNECTED:
+            session.status = CallSession.Status.CONNECTED
+            session.save(update_fields=["status", "updated_at"])
+            payload = {"type": "call_connected", "call": _serialize_call(session)}
+            _broadcast_call(session.id, payload)
+        return APIResponse.success(data={"call": _serialize_call(session)})
+
+
+class CallEndView(APIView):
+    """End an active call — single entry point (prevents duplicate call logs)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, call_id):
+        duration = request.data.get("duration", 0)
+        try:
+            duration = max(int(duration), 0)
+        except (TypeError, ValueError):
+            duration = 0
+
+        session = _get_call_for_user(call_id, request.user)
+        if not session:
+            return APIResponse.error(message="Call not found.", status_code=404)
+        if session.status in CallSession.TERMINAL_STATUSES:
+            return APIResponse.success(data={"call": _serialize_call(session)})
+        if session.status not in CallSession.ACTIVE_STATUSES:
+            return APIResponse.error(
+                message=f"Call is {session.status}.", status_code=409
+            )
+
+        session = finalize_call(session, CallSession.Status.ENDED, duration=duration)
+        logger.info("Call ended | call=%s duration=%s", call_id, duration)
+        return APIResponse.success(data={"call": _serialize_call(session)})
 
 
 class TurnCredentialsView(APIView):

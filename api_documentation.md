@@ -902,14 +902,71 @@ Sent when new public content is created (author is excluded):
 
 ## Notifications
 
-Real-time notifications for reactions and future events. Two separate concepts:
+Social activity alerts (reactions, comments). Each notification is stored in the DB, delivered over **WebSocket** when the app is open, and sent via **FCM push** when the app is in the background or closed.
+
+### Overview
 
 | Concept | Field / API | Meaning |
 |---------|-------------|---------|
-| **Badge (unread count)** | `unread_count`, `read-all` | User has not opened the notification list since these arrived |
-| **Individual read** | `is_read`, `/{id}/read/` | User opened a specific notification |
+| **Badge (unread count)** | `unread_count`, `read-all` | Notifications received since the user last opened the notification list |
+| **Individual read** | `is_read`, `/{id}/read/` | User opened a specific notification (e.g. navigated to the post) |
 
-Device registration for FCM: at **login** or **`POST /devices/register/`** — see [Push Notifications (Firebase)](#push-notifications-firebase).
+| Channel | Endpoint | When |
+|---------|----------|------|
+| **REST** | `GET /notifications/` | Load history, badge on app open |
+| **WebSocket** | `ws://host/ws/notifications/?token=` | Real-time while app is open |
+| **FCM push** | Automatic (no client trigger) | App background / closed — requires device registration |
+
+Device registration: at **login** or **`POST /devices/register/`** — see [Push Notifications (Firebase)](#push-notifications-firebase).
+
+---
+
+### Notification event types
+
+| `data.event` | Trigger | Recipient |
+|--------------|---------|-----------|
+| `reaction` | Someone reacts to your public post, media, or reel | Content owner |
+| `comment` | Someone comments on your post/reel/media | Content owner |
+| `comment` (reply) | Someone replies to your comment | Parent comment author |
+
+**Not notified:** self-actions, reaction removed, commenting on your own content, replying to yourself.
+
+#### Reaction payload fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | uuid | Notification ID — use for read/delete |
+| `event` | string | `"reaction"` |
+| `message` | string | Human-readable text, e.g. `"Riyad and 2 others reacted to your post."` |
+| `actor` | object | `{ id, name, avatar_url }` — who triggered it |
+| `reaction` | string | Actor's reaction: `love`, `angry`, `haha`, `wow`, `sad`, `care` |
+| `others_count` | int | Other reactors besides the actor |
+| `target_type` | string | `post`, `media`, or `reel` |
+| `target_id` | uuid | ID of the reacted item |
+| `post_id` | uuid \| null | Post to open (set for `post` and `media` targets) |
+| `reel_id` | uuid \| null | Reel to open (set for `reel` targets) |
+| `is_read` | bool | `false` until `POST /notifications/{id}/read/` |
+| `created_at` | ISO datetime | When the notification was created |
+| `unread_count` | int | Current badge count (WebSocket / push only) |
+
+#### Comment payload fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | uuid | Notification ID |
+| `event` | string | `"comment"` |
+| `message` | string | e.g. `"Riyad commented on your post."` or `"Riyad replied to your comment."` |
+| `actor` | object | `{ id, name, avatar_url }` |
+| `comment_id` | uuid | The new comment |
+| `comment_body` | string | Comment preview (max 120 chars) |
+| `parent_id` | uuid \| null | Set when this is a reply |
+| `target_type` | string | `post`, `media`, or `reel` |
+| `target_id` | uuid | ID of the commented item |
+| `post_id` | uuid \| null | Post to open |
+| `reel_id` | uuid \| null | Reel to open |
+| `is_read` | bool | Individual read state |
+| `created_at` | ISO datetime | Creation time |
+| `unread_count` | int | Current badge count (WebSocket / push only) |
 
 ---
 
@@ -919,8 +976,10 @@ Device registration for FCM: at **login** or **`POST /devices/register/`** — s
 **Authentication:** Required
 
 **Query Parameters:**
-- `page` (optional, default: 1)
-- `page_size` (optional, default: 20, max: 50)
+| Param | Default | Max | Description |
+|-------|---------|-----|-------------|
+| `page` | 1 | — | Page number |
+| `page_size` | 20 | 50 | Items per page |
 
 **Response (200 OK):**
 ```json
@@ -944,14 +1003,29 @@ Device registration for FCM: at **login** or **`POST /devices/register/`** — s
       "reel_id": null,
       "is_read": false,
       "created_at": "2026-06-30T10:30:00Z"
+    },
+    {
+      "id": "...",
+      "event": "comment",
+      "message": "Sarah replied to your comment.",
+      "actor": { "id": "...", "name": "Sarah", "avatar_url": "..." },
+      "comment_id": "...",
+      "comment_body": "Thanks!",
+      "parent_id": "...",
+      "target_type": "post",
+      "target_id": "...",
+      "post_id": "...",
+      "reel_id": null,
+      "is_read": false,
+      "created_at": "2026-07-04T10:30:00Z"
     }
   ],
   "meta": {
     "page": 1,
     "page_size": 20,
-    "total": 1,
+    "total": 2,
     "total_pages": 1,
-    "unread_count": 1
+    "unread_count": 2
   }
 }
 ```
@@ -1049,14 +1123,93 @@ Also pushes a WebSocket `unread_count` event (see below).
 ```
 
 **Error Responses:**
-- `404 Not Found` - Notification not found
+- `404 Not Found` — Notification not found
 
-**Frontend flow:**
-- On app load: `GET /notifications/unread-count/`
-- On WebSocket `new` event: set badge from `data.unread_count`
-- On notification list open: `POST /notifications/read-all/` → badge `0`
-- On single notification tap: `POST /notifications/{id}/read/` → `is_read: true` for that item
-- New notification after `read-all`: badge starts at `1` again
+---
+
+### 6. Register Device (push)
+**Endpoint:** `POST /devices/register/`
+
+**Authentication:** Required
+
+**Description:** Register or replace the user's FCM token for push notifications. Also supported at login — see [Push Notifications (Firebase)](#push-notifications-firebase). Each user keeps **one** token row (re-register replaces the previous token).
+
+**Body:** (`device_id` or `deviceId` accepted)
+```json
+{
+  "deviceId": "stable-device-uuid-from-app",
+  "fcm_token": "firebase-messaging-token",
+  "platform": "android"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Device registered."
+}
+```
+
+---
+
+### 7. Unregister Device
+**Endpoint:** `DELETE /devices/unregister/`
+
+**Authentication:** Required
+
+**Description:** Remove device token on logout.
+
+**Body:**
+```json
+{
+  "device_id": "stable-device-uuid-from-app"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Device unregistered."
+}
+```
+
+---
+
+### Frontend integration flow
+
+```
+App launch
+  → GET /notifications/unread-count/          (badge)
+  → Connect ws://host/ws/notifications/?token=<access_token>
+
+On WebSocket event "new"
+  → Update badge from data.unread_count
+  → Show in-app alert / prepend to list
+
+On notification list open
+  → GET /notifications/
+  → POST /notifications/read-all/           (badge → 0)
+
+On notification tap
+  → POST /notifications/{id}/read/
+  → Navigate using post_id / reel_id / comment_id
+
+On login (or FCM token refresh)
+  → POST /login/ with push fields, OR POST /devices/register/
+
+On logout
+  → DELETE /devices/unregister/
+```
+
+**Navigation by event:**
+
+| `data.event` | Open |
+|--------------|------|
+| `reaction` on post/media | `GET /feed/posts/{post_id}/` |
+| `reaction` on reel | Reel detail (use `reel_id`) |
+| `comment` | Same as above + scroll to `comment_id` if supported |
 
 ---
 
@@ -1067,10 +1220,11 @@ Also pushes a WebSocket `unread_count` event (see below).
 ws://localhost:8000/ws/notifications/?token=<access_token>
 ```
 
-Auto-subscribes on connect — no client message needed.
+**Authentication:** App JWT in query string (same token as REST `Authorization: Bearer`).
 
-All messages use the same envelope (designed for future Firebase mirroring):
+Auto-subscribes on connect — no client message required. User joins group `notify_{user_id}`.
 
+**Envelope (all server → client messages):**
 ```json
 {
   "type": "notification_event",
@@ -1079,12 +1233,12 @@ All messages use the same envelope (designed for future Firebase mirroring):
 }
 ```
 
-| `event` | When | Action |
-|---------|------|--------|
-| `new` | New notification created | Show alert / increment badge |
-| `unread_count` | After `read-all` (or future sync) | Set badge to `data.unread_count` |
+| `event` | When | Client action |
+|---------|------|---------------|
+| `new` | Reaction or comment notification created | Show alert, update badge, refresh list |
+| `unread_count` | After `POST /notifications/read-all/` | Set badge to `data.unread_count` |
 
-**Event: `new`**
+**Event: `new` (reaction)**
 ```json
 {
   "type": "notification_event",
@@ -1111,6 +1265,30 @@ All messages use the same envelope (designed for future Firebase mirroring):
 }
 ```
 
+**Event: `new` (comment)**
+```json
+{
+  "type": "notification_event",
+  "event": "new",
+  "data": {
+    "id": "...",
+    "event": "comment",
+    "message": "Riyad commented on your post.",
+    "actor": { "id": "...", "name": "Riyad", "avatar_url": "..." },
+    "comment_id": "...",
+    "comment_body": "Nice post!",
+    "parent_id": null,
+    "target_type": "post",
+    "target_id": "...",
+    "post_id": "...",
+    "reel_id": null,
+    "is_read": false,
+    "created_at": "2026-07-04T10:30:00Z",
+    "unread_count": 1
+  }
+}
+```
+
 **Event: `unread_count`**
 ```json
 {
@@ -1122,42 +1300,35 @@ All messages use the same envelope (designed for future Firebase mirroring):
 }
 ```
 
-| Field | Description |
-|-------|-------------|
-| `reaction` | The actor's reaction only (`love`, `sad`, `haha`, etc.) |
-| `others_count` | Other reactors besides the actor |
-| `is_read` | Individual open state — use `POST /notifications/{id}/read/` to set `true` |
-| `unread_count` | Badge count in `new` events; full sync in `unread_count` events |
-| `post_id` | Open via `GET /feed/posts/{post_id}/` |
-| `reel_id` | Set for reel reactions (reel detail API coming later) |
-| `target_type` | `post`, `media`, or `reel` |
-
-**Triggered when:** Someone reacts to your public post, media item, or reel (not on reaction remove; not when you react to your own content).
+> FCM push uses the same `data` object as WebSocket — see [Social push (FCM)](#social-push-fcm) below.
 
 ---
 
 ## Push Notifications (Firebase)
 
-Used for alerts when the app is in the **background or closed**. In-app real-time still uses WebSocket.
+Used when the app is in the **background or closed**. In-app real-time uses WebSocket (see [Notifications WebSocket](#notifications-websocket) and [Chat WebSocket](#chat-websocket)).
 
 | Channel | When |
 |---------|------|
-| WebSocket | App open — chat, feed, notifications |
-| FCM push | App background/closed — system tray notification |
+| WebSocket | App open — notifications, chat, feed |
+| FCM push | App background/closed — system tray |
 
 **Requirements (Flutter / mobile):**
 - Firebase project with Android + iOS apps configured
-- Real `fcm_token` from `FirebaseMessaging.instance.getToken()` (Postman fake tokens will not deliver to a phone)
-- Send `deviceId`, `fcm_token`, and `platform` at **login**, or call `POST /devices/register/` after login (e.g. on FCM token refresh)
+- Real `fcm_token` from `FirebaseMessaging.instance.getToken()`
+- Register via **login** or **`POST /devices/register/`** (see [Register Device](#6-register-device-push))
+- Re-register when Firebase refreshes the token (`onTokenRefresh`)
 - iOS: APNs key uploaded to Firebase; test on a **physical device**
+
+**Storage:** One FCM token per user — each register call **replaces** the previous token.
 
 ---
 
-### 1. Register Device
+### Register at login
 
-Register at **login** or via **`POST /devices/register/`** after login (useful when FCM token refreshes without re-login).
+**Endpoint:** `POST /login/`
 
-**Option A — at login** (`POST /login/`):
+Include push fields in the login body:
 
 ```json
 {
@@ -1168,63 +1339,85 @@ Register at **login** or via **`POST /devices/register/`** after login (useful w
 }
 ```
 
-**Option B — after login** (`POST /devices/register/`):
-
-**Authentication:** Required (`Authorization: Bearer <token>`)
-
-**Body:**
-```json
-{
-  "device_id": "stable-device-uuid-from-app",
-  "fcm_token": "firebase-messaging-token",
-  "platform": "android"
-}
-```
-
-| Field | Required | Values |
-|-------|----------|--------|
-| `device_id` | Yes | Stable ID per device (from Flutter) |
+| Field | Required for push | Values |
+|-------|-------------------|--------|
+| `deviceId` | Yes | Stable ID per device |
 | `fcm_token` | Yes | From Firebase Messaging SDK |
 | `platform` | Yes | `android`, `ios` |
 
-**Response (200 OK):**
-```json
-{
-  "success": true,
-  "message": "Device registered."
-}
-```
-
-If the same `device_id` is sent again, the token is updated (`"Device updated."`).
-
-**Error responses:**
-- `400` — missing `device_id` / `fcm_token`, or invalid `platform`
-- `401` — missing or invalid Bearer token
-- `422` (login only) — push fields incomplete on login body
+All three must be sent together. Login works without them (no push until registered later).
 
 ---
 
-### 2. Unregister Device
-**Endpoint:** `DELETE /devices/unregister/`
+### Social push (FCM)
 
-**Authentication:** Required
+Sent automatically when a reaction or comment notification is created. No client API to trigger push.
 
-**Description:** Removes the device token on logout.
+**System notification (tray):**
 
-**Body:**
+| Type | Title | Body |
+|------|-------|------|
+| Reaction / comment | Actor name | `message` from payload |
+
+**FCM `data` payload:**
 ```json
 {
-  "device_id": "stable-device-uuid-from-app"
+  "type": "notification_event",
+  "event": "new",
+  "notification_id": "550e8400-e29b-41d4-a716-446655440000",
+  "payload": "{\"id\":\"...\",\"event\":\"reaction\",\"message\":\"Riyad reacted to your post.\",...}"
 }
 ```
 
-**Response (200 OK):**
-```json
-{
-  "success": true,
-  "message": "Device unregistered."
-}
+| Field | Description |
+|-------|-------------|
+| `type` | Always `"notification_event"` for social alerts |
+| `event` | Always `"new"` for new notifications |
+| `notification_id` | Same as `id` in WebSocket / REST |
+| `payload` | **Stringified JSON** — same object as WebSocket `data` |
+
+**Flutter handling:**
+```dart
+// Background / terminated — user taps notification
+FirebaseMessaging.onMessageOpenedApp.listen((message) {
+  if (message.data['type'] == 'notification_event') {
+    final data = jsonDecode(message.data['payload']);
+    if (data['post_id'] != null) openPost(data['post_id']);
+    else if (data['reel_id'] != null) openReel(data['reel_id']);
+  }
+});
+
+// Foreground — suppress if ws/notifications already handled it
+FirebaseMessaging.onMessage.listen((message) {
+  if (message.data['type'] == 'notification_event') {
+    showLocalBanner(message); // optional
+  }
+});
 ```
+
+---
+
+### Chat push (FCM)
+
+See [Chat Push Notification (FCM)](#chat-push-notification-fcm) in the Chat API section.
+
+| `data.type` | Trigger |
+|-------------|---------|
+| `notification_event` | Reaction, comment |
+| `chat_message` | New chat message |
+| `incoming_call` | Incoming 1:1 voice/video call |
+
+> **Full Postman reference:** [`CHAT_AND_CALLING.md`](CHAT_AND_CALLING.md) — every chat/call HTTP endpoint and WebSocket message with bodies and responses, plus step-by-step test flows.
+
+---
+
+## Chat & Calling
+
+Direct messages (DM), group chats, and **1:1 voice/video calls** (WhatsApp-style).
+
+**Postman-ready reference (every HTTP + WS body/response):** [`CHAT_AND_CALLING.md`](CHAT_AND_CALLING.md)
+
+The sections below are a summary; use the linked doc for full request/response examples and Postman test flows.
 
 ---
 
@@ -1370,7 +1563,245 @@ User must be a **participant** of `conv_id`; otherwise the connection is rejecte
 }
 ```
 
-Other events: `typing`, `presence`, `message_edited`, `message_deleted`, `react`, call/WebRTC signaling.
+Other events: `typing`, `presence`, `message_edited`, `message_deleted`, `react`.
+
+> **Calls are not signaled on this socket.** Use the [Calls API](#calls-api-11-webrtc) and `/ws/calls/{call_id}/` instead.
+
+---
+
+## Calls API (1:1 WebRTC)
+
+WhatsApp-style 1:1 audio/video. **REST** manages ring/accept/decline/end; **WebSocket** relays WebRTC only; **FCM** wakes callee when app is closed.
+
+See [`CHAT_AND_CALLING.md`](CHAT_AND_CALLING.md) for the full tutorial.
+
+### 1. Get TURN credentials
+
+**Endpoint:** `GET /turn-credentials/`
+
+**Authentication:** Required
+
+**Description:** Short-lived STUN/TURN ICE servers for WebRTC. Fetch before creating `RTCPeerConnection`.
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "ice_servers": [
+      { "urls": ["stun:103.149.105.4:3478"] },
+      {
+        "urls": [
+          "turn:103.149.105.4:3478?transport=udp",
+          "turn:103.149.105.4:3478?transport=tcp"
+        ],
+        "username": "1735689600:user-uuid",
+        "credential": "base64-hmac..."
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 2. Initiate call
+
+**Endpoint:** `POST /calls/initiate/`
+
+**Authentication:** Required
+
+**Description:** Start a 1:1 call from **any screen** (profile, chat list, etc.). Creates DM conversation if needed. Sends high-priority FCM + notifications WebSocket to callee.
+
+**Body:**
+```json
+{
+  "callee_id": "target-user-uuid",
+  "call_type": "video"
+}
+```
+
+| Field | Required | Values |
+| --- | --- | --- |
+| `callee_id` | Yes | User UUID to call |
+| `call_type` | No | `audio` (default) or `video` |
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "message": "Call ringing.",
+  "data": {
+    "call": {
+      "id": "call-session-uuid",
+      "conv_id": "conversation-uuid",
+      "caller_id": "...",
+      "callee_id": "...",
+      "call_type": "video",
+      "status": "ringing",
+      "duration": 0,
+      "created_at": "...",
+      "ended_at": null
+    },
+    "caller": { "id": "...", "name": "...", "avatar_url": "..." },
+    "callee": { "id": "...", "name": "...", "avatar_url": "..." }
+  }
+}
+```
+
+**Errors:**
+- `409` — caller or callee already in an active call
+- `400` — cannot call yourself
+
+**Frontend next steps:** Connect `ws://host/ws/calls/{call.id}/?token=...`, show "Calling…", fetch TURN creds.
+
+---
+
+### 3. Get call status
+
+**Endpoint:** `GET /calls/{call_id}/`
+
+**Authentication:** Required (caller or callee only)
+
+---
+
+### 4. Accept call
+
+**Endpoint:** `POST /calls/{call_id}/accept/`
+
+**Authentication:** Required (**callee only**)
+
+**Description:** Callee accepts. Broadcasts `call_accepted` on call WS + notifications WS.
+
+---
+
+### 5. Decline call
+
+**Endpoint:** `POST /calls/{call_id}/decline/`
+
+**Authentication:** Required (**callee only**, while `status` is `ringing`)
+
+**Description:** Creates one call log message in chat (`declined`).
+
+---
+
+### 6. Cancel / miss (caller)
+
+**Endpoint:** `POST /calls/{call_id}/cancel/`
+
+**Authentication:** Required (**caller only**, while `status` is `ringing`)
+
+**Description:** Caller hung up before answer. Logged as `missed` for callee.
+
+---
+
+### 7. Report media connected (optional)
+
+**Endpoint:** `POST /calls/{call_id}/connected/`
+
+**Authentication:** Required
+
+**Description:** Client reports WebRTC media connected (`status` → `connected`). Optional — use for analytics or server-side UI sync.
+
+---
+
+### 8. End call
+
+**Endpoint:** `POST /calls/{call_id}/end/`
+
+**Authentication:** Required (caller or callee)
+
+**Description:** **Single** end point — creates **one** call log in chat. Idempotent if already ended.
+
+**Body:**
+```json
+{
+  "duration": 125
+}
+```
+
+`duration` — call length in seconds (for completed calls).
+
+---
+
+### Call WebSocket (WebRTC signaling)
+
+**Connection:**
+```
+ws://localhost:8000/ws/calls/{call_id}/?token=<access_token>
+```
+
+Only caller/callee may connect. Rejected if call is not active (`ringing`, `accepted`, or `connected`).
+
+**Client → Server:**
+
+```json
+{ "type": "offer", "sdp": { "type": "offer", "sdp": "..." } }
+{ "type": "answer", "sdp": { "type": "answer", "sdp": "..." } }
+{ "type": "ice_candidate", "candidate": { "candidate": "...", "sdpMid": "0", "sdpMLineIndex": 0 } }
+{ "type": "ping" }
+```
+
+**Server → Client:** Same types (relayed from peer with `sender_id`), plus:
+
+```json
+{ "type": "call_accepted", "call": { ... }, "accepted_by": "user-uuid" }
+{ "type": "call_connected", "call": { ... } }
+{ "type": "call_ended", "call": { ... } }
+{ "type": "pong" }
+```
+
+**Do not** end calls via WebSocket — use `POST /calls/{id}/end/`.
+
+---
+
+### Incoming call push (FCM)
+
+High-priority push when `POST /calls/initiate/` runs. Callee receives even if app is backgrounded.
+
+**FCM `data` payload:**
+```json
+{
+  "type": "incoming_call",
+  "call_id": "call-session-uuid",
+  "conv_id": "conversation-uuid",
+  "caller_id": "caller-uuid",
+  "caller_name": "Jane Doe",
+  "caller_avatar": "https://...",
+  "call_type": "video"
+}
+```
+
+**Also delivered on notifications WebSocket** (`/ws/notifications/`) when app is open:
+
+```json
+{
+  "type": "incoming_call",
+  "call": { "id": "...", "conv_id": "...", "call_type": "video", "status": "ringing" },
+  "caller": { "id": "...", "name": "...", "avatar_url": "..." }
+}
+```
+
+**Flutter handling:**
+1. Background FCM → show CallKit / full-screen incoming UI
+2. User accepts → `POST /calls/{call_id}/accept/`
+3. `GET /turn-credentials/` → create `RTCPeerConnection`
+4. Connect call WebSocket → exchange offer/answer/ICE
+5. Show "Connecting…" until ICE `connected`; hang up via `POST /calls/{id}/end/`
+
+---
+
+### Call state values
+
+| status | Meaning |
+|--------|---------|
+| `ringing` | Waiting for callee |
+| `accepted` | Callee accepted; WebRTC negotiation |
+| `connected` | Client reported media up (optional) |
+| `ended` | Completed call |
+| `missed` | No answer / caller cancelled |
+| `declined` | Callee rejected |
+| `cancelled` | Reserved |
 
 ---
 

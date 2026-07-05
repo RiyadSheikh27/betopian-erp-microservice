@@ -24,7 +24,7 @@ def _get_app():
     return _app
 
 
-def send_to_user(user_id, *, title, body, data):
+def send_to_user(user_id, *, title, body, data, high_priority=False):
     if not _get_app():
         return
 
@@ -38,10 +38,23 @@ def send_to_user(user_id, *, title, body, data):
         logger.debug("FCM skip | user=%s no tokens", user_id)
         return
 
+    notification = None
+    if title or body:
+        notification = messaging.Notification(title=title or "Betopian", body=body or "")
+
+    android = messaging.AndroidConfig(priority="high") if high_priority else None
+    apns = (
+        messaging.APNSConfig(headers={"apns-priority": "10"})
+        if high_priority
+        else None
+    )
+
     message = messaging.MulticastMessage(
-        notification=messaging.Notification(title=title, body=body),
+        notification=notification,
         data={k: str(v) for k, v in data.items()},
         tokens=tokens,
+        android=android,
+        apns=apns,
     )
     response = messaging.send_each_for_multicast(message)
     logger.info(

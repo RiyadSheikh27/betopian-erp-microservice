@@ -169,6 +169,72 @@ class MessageStatus(TimeStampedModel):
         ]
 
 
+class CallSession(TimeStampedModel):
+    """
+    Live 1:1 call state (WhatsApp-style).
+    REST creates/updates lifecycle; WebSocket at /ws/calls/{id}/ relays WebRTC only.
+    """
+
+    class Status(models.TextChoices):
+        RINGING = "ringing", "Ringing"
+        ACCEPTED = "accepted", "Accepted"
+        CONNECTED = "connected", "Connected"
+        ENDED = "ended", "Ended"
+        MISSED = "missed", "Missed"
+        DECLINED = "declined", "Declined"
+        CANCELLED = "cancelled", "Cancelled"
+
+    class CallType(models.TextChoices):
+        AUDIO = "audio", "Audio"
+        VIDEO = "video", "Video"
+
+    ACTIVE_STATUSES = (
+        Status.RINGING,
+        Status.ACCEPTED,
+        Status.CONNECTED,
+    )
+    TERMINAL_STATUSES = (
+        Status.ENDED,
+        Status.MISSED,
+        Status.DECLINED,
+        Status.CANCELLED,
+    )
+
+    conversation = models.ForeignKey(
+        Conversation, on_delete=models.CASCADE, related_name="call_sessions"
+    )
+    caller = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="calls_initiated",
+    )
+    callee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="calls_received_live",
+    )
+    call_type = models.CharField(max_length=10, choices=CallType.choices)
+    status = models.CharField(
+        max_length=12, choices=Status.choices, default=Status.RINGING, db_index=True
+    )
+    duration = models.PositiveIntegerField(default=0)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    call_log = models.OneToOneField(
+        "CallLog",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="session",
+    )
+
+    class Meta(TimeStampedModel.Meta):
+        db_table = "call_sessions"
+        indexes = [
+            models.Index(fields=["caller", "status"], name="idx_call_sess_caller"),
+            models.Index(fields=["callee", "status"], name="idx_call_sess_callee"),
+        ]
+
+
 class CallLog(TimeStampedModel):
     """
     Stores call history per conversation.
@@ -183,6 +249,7 @@ class CallLog(TimeStampedModel):
         COMPLETED = "completed", "Completed"
         MISSED = "missed", "Missed"
         DECLINED = "declined", "Declined"
+        CANCELLED = "cancelled", "Cancelled"
 
     conversation = models.ForeignKey(
         Conversation, on_delete=models.CASCADE, related_name="calls"
