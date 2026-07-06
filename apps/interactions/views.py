@@ -1,6 +1,8 @@
 import base64
 import logging
+
 from django.db.models import Count as DCount
+from django.utils import timezone
 
 from django.contrib.contenttypes.models import ContentType
 from rest_framework.views import APIView
@@ -10,6 +12,7 @@ from apps.utils.throttles import InteractionThrottle
 
 from apps.utils.response import APIResponse
 from apps.contents.models import Post, PostMedia, Reel
+from apps.story.models import Story
 from .models import Like, Comment
 from .serializers import (
     LikerSerializer,
@@ -25,6 +28,7 @@ TARGET_MODEL_MAP = {
     "post": Post,
     "media": PostMedia,
     "reel": Reel,
+    "story": Story,
 }
 
 
@@ -101,7 +105,7 @@ class LikeToggleView(APIView):
         if not content_type:
             return APIResponse.error(
                 errors={
-                    "target_type": f"Invalid type '{target_type}'. Use post, media or reel."
+                    "target_type": f"Invalid type '{target_type}'. Use post, media, reel or story."
                 },
                 status_code=400,
             )
@@ -129,6 +133,10 @@ class LikeToggleView(APIView):
             elif target_type == "reel":
                 target = model.objects.select_related("author").get(
                     pk=pk, privacy=Reel.Privacy.PUBLIC
+                )
+            elif target_type == "story":
+                target = model.objects.select_related("author").get(
+                    pk=pk, expires_at__gt=timezone.now()
                 )
         except model.DoesNotExist:
             return APIResponse.error(message="Target not found.", status_code=404)
@@ -192,13 +200,16 @@ class LikeToggleView(APIView):
                 request.user, reaction, target_type, target, like_count
             )
 
+        response_data = {
+            "reacted": reacted,
+            "reaction": reaction,
+        }
+        if target_type != "story" or target.author_id == request.user.id:
+            response_data["total_count"] = like_count
+            response_data["reaction_counts"] = reaction_counts
+
         return APIResponse.success(
-            data={
-                "reacted": reacted,
-                "reaction": reaction,
-                "total_count": like_count,
-                "reaction_counts": reaction_counts,
-            },
+            data=response_data,
             message=f"Reacted with {reaction}." if reacted else "Reaction removed.",
         )
 
@@ -217,10 +228,18 @@ class LikerListView(APIView):
         if not content_type:
             return APIResponse.error(
                 errors={
-                    "target_type": f"Invalid type '{target_type}'. Use post, media or reel."
+                    "target_type": f"Invalid type '{target_type}'. Use post, media, reel or story."
                 },
                 status_code=400,
             )
+
+        if target_type == "story":
+            try:
+                story = Story.objects.select_related("author").get(pk=pk)
+            except Story.DoesNotExist:
+                return APIResponse.error(message="Target not found.", status_code=404)
+            if story.author_id != request.user.id:
+                return APIResponse.error(message="Not allowed.", status_code=403)
 
         try:
             page_size = min(int(request.query_params.get("page_size", 20)), 50)

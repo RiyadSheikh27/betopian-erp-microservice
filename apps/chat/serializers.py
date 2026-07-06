@@ -119,6 +119,7 @@ class MessageMediaSerializer(serializers.ModelSerializer):
 class MessageSerializer(serializers.ModelSerializer):
     sender = serializers.SerializerMethodField()
     reply_to = serializers.SerializerMethodField()
+    story = serializers.SerializerMethodField()
     media = MessageMediaSerializer(many=True, read_only=True)
     reactions = serializers.SerializerMethodField()
     read_by_count = serializers.IntegerField(read_only=True, default=0)
@@ -132,6 +133,7 @@ class MessageSerializer(serializers.ModelSerializer):
             "type",
             "body",
             "reply_to",
+            "story",
             "media",
             "reactions",
             "read_by_count",
@@ -159,6 +161,13 @@ class MessageSerializer(serializers.ModelSerializer):
             "body": obj.reply_to.body,
         }
 
+    def get_story(self, obj):
+        if not obj.story_id:
+            return None
+        from apps.story.serializers import serialize_story_brief
+
+        return serialize_story_brief(obj.story, self.context.get("request"))
+
     def get_is_mine(self, obj):
         request = self.context.get("request")
         return bool(request and obj.sender_id == request.user.id)
@@ -178,6 +187,7 @@ class MediaUploadSerializer(serializers.Serializer):
     files = serializers.ListField(child=serializers.FileField(), required=True)
     body = serializers.CharField(allow_blank=True, required=False, default="")
     reply_to_id = serializers.UUIDField(required=False, allow_null=True)
+    story_id = serializers.UUIDField(required=False, allow_null=True)
 
     def validate_files(self, files):
         size_map = {

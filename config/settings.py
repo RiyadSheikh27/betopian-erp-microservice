@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "apps.ebook",
     "apps.chat",
     "apps.notifications",
+    "apps.story",
 ]
 
 MIDDLEWARE = [
@@ -156,7 +157,7 @@ USE_TZ = True
 
 """ Static files (CSS, JavaScript, Images) """
 
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 MEDIA_URL = "/media/"
@@ -263,6 +264,10 @@ IMAGE_MAX_DIMENSION = config(
     "IMAGE_MAX_DIMENSION", default=1920, cast=int
 )  # max width or height px
 AVATAR_MAX_DIMENSION = config("AVATAR_MAX_DIMENSION", default=400, cast=int)
+
+STORY_VIDEO_MAX_DURATION_SECONDS = config(
+    "STORY_VIDEO_MAX_DURATION_SECONDS", default=60, cast=int
+)
 
 """ Message Media Size Limits """
 

@@ -749,6 +749,217 @@ curl -X PATCH http://localhost:8000/api/reels/550e8400-e29b-41d4-a716-4466554400
 
 ---
 
+## Stories API
+
+Stories are visible to all authenticated users for **24 hours**, then removed from the public tray. The **owner** keeps a permanent archive via `GET /stories/mine/` with viewers and reactors on every story.
+
+**Reactions:** Same as posts/reels — `POST /react/story/{id}/` with `love`, `angry`, `haha`, `wow`, `sad`, `care`.
+
+**Upload limits:** Same image size/compression and video size limits as posts (from `.env`). Video stories max **60 seconds**.
+
+### 1. Story Tray
+**Endpoint:** `GET /stories/tray/`
+
+**Authentication:** Required
+
+**Description:** Returns the story ring — your own active story summary plus other users with active stories, ordered with unseen first. After you watch all of someone's active stories, they move to the end of your tray.
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "my_story": {
+      "item_count": 2,
+      "has_unseen": false,
+      "preview_url": "http://localhost:8000/media/stories/thumbnails/..."
+    },
+    "stories": [
+      {
+        "user": {
+          "id": "550e8400-e29b-41d4-a716-446655440001",
+          "name": "John Doe",
+          "avatar_url": "https://..."
+        },
+        "has_unseen": true,
+        "item_count": 3,
+        "preview_url": "http://localhost:8000/media/stories/..."
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 2. User Story Carousel
+**Endpoint:** `GET /stories/user/{user_id}/`
+
+**Authentication:** Required
+
+**Description:** All **active** story segments for one user, oldest first (carousel order).
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "media_type": "video",
+      "media_url": "http://localhost:8000/media/stories/2026/07/06/video.mp4",
+      "thumbnail_url": "http://localhost:8000/media/stories/thumbnails/2026/07/06/thumb.jpg",
+      "expires_at": "2026-07-07T10:30:00Z",
+      "is_active": true,
+      "like_count": 5,
+      "viewer_count": 12,
+      "user_reaction": "love",
+      "top_reacts": ["love", "haha", "wow"],
+      "is_viewed": false,
+      "is_mine": false,
+      "created_at": "2026-07-06T10:30:00Z"
+    }
+  ]
+}
+```
+
+**Notes:**
+- `thumbnail_url` may be `null` for video until the background Celery task finishes.
+- `preview_url` is **not** included in this response — use `media_url` (and `thumbnail_url` for video poster if needed).
+- **Stats visibility:** `like_count`, `viewer_count`, and `top_reacts` are only returned to the **story owner** (`is_mine: true`). Other users receive `null` for those fields. `user_reaction` is always returned for the current user (their own reaction).
+
+---
+
+### 3. Upload Story
+**Endpoint:** `POST /stories/`
+
+**Authentication:** Required
+
+**Content-Type:** `multipart/form-data`
+
+**Request Body:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `file` | file | Yes | One image **or** one video |
+
+**Response (201 Created):** Story object (same shape as carousel item).
+
+**Notes:**
+- Image is compressed using the same settings as posts.
+- Video duration must be ≤ 60 seconds.
+- Story expires 24 hours after upload (`expires_at`).
+- Video thumbnail is generated asynchronously via Celery.
+
+---
+
+### 4. Mark Story Viewed
+**Endpoint:** `POST /stories/{id}/view/`
+
+**Authentication:** Required
+
+**Description:** Record that the current user viewed a story segment. When all active segments from that author are viewed, the author moves to the end of the viewer's tray.
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": { "viewed": true }
+}
+```
+
+---
+
+### 5. Owner Archive
+**Endpoint:** `GET /stories/mine/`
+
+**Authentication:** Required
+
+**Description:** All stories ever uploaded by the authenticated user (active and expired), newest first. Cursor-paginated.
+
+**Query Parameters:**
+- `page_size` (optional, default: 20, max: 50)
+- `cursor` (optional)
+
+**Response (200 OK):** Paginated list of story objects with `is_active` flag and full stats (`like_count`, `viewer_count`, `top_reacts`).
+
+---
+
+### 6. Story Viewers (owner only)
+**Endpoint:** `GET /stories/{id}/viewers/`
+
+**Authentication:** Required (story owner only)
+
+**Query Parameters:**
+- `page` (optional, default: 1)
+- `page_size` (optional, default: 20, max: 50)
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "user_id": "550e8400-e29b-41d4-a716-446655440002",
+      "name": "Jane Smith",
+      "avatar_url": "https://...",
+      "viewed_at": "2026-07-06T11:00:00Z"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "page_size": 20,
+    "total": 15,
+    "total_pages": 1
+  }
+}
+```
+
+Works for **expired** stories too.
+
+---
+
+### 7. Delete Story
+**Endpoint:** `DELETE /stories/{id}/`
+
+**Authentication:** Required (owner only)
+
+**Description:** Permanently deletes the story, media, and thumbnail from storage.
+
+---
+
+### 8. React to Story
+**Endpoint:** `POST /react/story/{id}/`
+
+**Authentication:** Required
+
+**Request Body:**
+```json
+{ "reaction": "love" }
+```
+
+Same toggle/switch rules as posts/reels. Only works while the story is **active** (within 24h).
+
+**Response for non-owners:** Returns only `reacted` and `reaction`. `total_count` and `reaction_counts` are omitted (story owner only).
+
+**Owner notification:** `"Riyad reacted to your story."` / `"Riyad and 2 other people reacted to your story."` (WebSocket + Firebase).
+
+---
+
+### 9. Story Reactors
+**Endpoint:** `GET /reactors/story/{id}/`
+
+**Authentication:** Required (**story owner only**)
+
+**Description:** Paginated list of users who reacted. Works for active and expired stories.
+
+**Error Responses:**
+- `403 Forbidden` — not the story owner
+
+**Query Parameters:**
+- `page`, `page_size`, `reaction` (optional filter)
+
+---
+
 ## News Feed API
 
 ### 1. Post News Feed
@@ -925,7 +1136,7 @@ Device registration: at **login** or **`POST /devices/register/`** — see [Push
 
 | `data.event` | Trigger | Recipient |
 |--------------|---------|-----------|
-| `reaction` | Someone reacts to your public post, media, or reel | Content owner |
+| `reaction` | Someone reacts to your public post, media, reel, or **story** | Content owner |
 | `comment` | Someone comments on your post/reel/media | Content owner |
 | `comment` (reply) | Someone replies to your comment | Parent comment author |
 
@@ -941,10 +1152,11 @@ Device registration: at **login** or **`POST /devices/register/`** — see [Push
 | `actor` | object | `{ id, name, avatar_url }` — who triggered it |
 | `reaction` | string | Actor's reaction: `love`, `angry`, `haha`, `wow`, `sad`, `care` |
 | `others_count` | int | Other reactors besides the actor |
-| `target_type` | string | `post`, `media`, or `reel` |
+| `target_type` | string | `post`, `media`, `reel`, or `story` |
 | `target_id` | uuid | ID of the reacted item |
 | `post_id` | uuid \| null | Post to open (set for `post` and `media` targets) |
 | `reel_id` | uuid \| null | Reel to open (set for `reel` targets) |
+| `story_id` | uuid \| null | Story to open (set for `story` targets) |
 | `is_read` | bool | `false` until `POST /notifications/{id}/read/` |
 | `created_at` | ISO datetime | When the notification was created |
 | `unread_count` | int | Current badge count (WebSocket / push only) |
@@ -1491,8 +1703,9 @@ Direct messages (DM) and group chats. Text is sent over WebSocket; media/docs ov
 - `files` — one or more files
 - `body` (optional) — caption
 - `reply_to_id` (optional) — UUID
+- `story_id` (optional) — UUID of an **active** story being replied to
 
-**Response (201):** Message object. Then notify other clients via WebSocket (see below).
+**Response (201):** Message object with optional `story` preview. Then notify other clients via WebSocket (see below).
 
 ---
 
@@ -1514,7 +1727,20 @@ User must be a **participant** of `conv_id`; otherwise the connection is rejecte
 {
   "type": "message",
   "body": "Hello!",
-  "reply_to_id": null
+  "reply_to_id": null,
+  "story_id": null
+}
+```
+
+`story_id` — optional UUID of an active story (Facebook-style reply to story). Message `data` includes:
+```json
+"story": {
+  "id": "...",
+  "media_type": "image",
+  "media_url": "...",
+  "thumbnail_url": "...",
+  "preview_url": "...",
+  "author": { "id": "...", "name": "...", "avatar_url": "..." }
 }
 ```
 
@@ -1935,9 +2161,17 @@ No explicit rate limiting is currently implemented. Clients should implement rea
 
 ## File Upload Limits
 
-- Maximum file size: Check Django settings (typically 100MB)
+**Posts & stories** (from `.env`):
+- `IMAGE_UPLOAD_MAX_SIZE_MB` (default 10)
+- `VIDEO_UPLOAD_MAX_SIZE_MB` (default 200)
+- `IMAGE_COMPRESSION_QUALITY`, `IMAGE_MAX_DIMENSION`
+- Story videos: max **60 seconds** (`STORY_VIDEO_MAX_DURATION_SECONDS`)
+
+**Chat media:** separate limits — `CHAT_IMAGE_MAX_SIZE_MB`, `CHAT_VIDEO_MAX_SIZE_MB`, `CHAT_DOC_MAX_SIZE_MB`
+
 - Supported image formats: JPEG, PNG, GIF, WebP
 - Supported video formats: MP4, MOV, AVI, WebM
+- Story video thumbnails require **ffmpeg/ffprobe** on the Celery worker
 
 ---
 

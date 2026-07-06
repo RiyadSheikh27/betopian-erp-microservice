@@ -14,7 +14,11 @@ def _owner(target_type, target):
 
 
 def _content_label(target_type):
-    return "reel" if target_type == "reel" else "post"
+    if target_type == "reel":
+        return "reel"
+    if target_type == "story":
+        return "story"
+    return "post"
 
 
 def _message(actor_name, others_count, target_type):
@@ -82,13 +86,15 @@ def notify_reaction(actor, reaction, target_type, target, total_count):
         return
 
     others_count = max(total_count - 1, 0)
-    post_id = reel_id = None
+    post_id = reel_id = story_id = None
     if target_type == "post":
         post_id = target.pk
     elif target_type == "media":
         post_id = target.post_id
     elif target_type == "reel":
         reel_id = target.pk
+    elif target_type == "story":
+        story_id = target.pk
 
     payload = {
         "event": "reaction",
@@ -104,6 +110,7 @@ def notify_reaction(actor, reaction, target_type, target, total_count):
         "target_id": str(target.pk),
         "post_id": str(post_id) if post_id else None,
         "reel_id": str(reel_id) if reel_id else None,
+        "story_id": str(story_id) if story_id else None,
     }
 
     notification = Notification.objects.create(

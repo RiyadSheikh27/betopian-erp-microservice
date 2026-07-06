@@ -96,7 +96,7 @@ def _msg_qs(conv):
     """Annotated message queryset for a conversation."""
     return (
         Message.objects.filter(conversation=conv)
-        .select_related("sender", "reply_to__sender")
+        .select_related("sender", "reply_to__sender", "story__author")
         .prefetch_related("media", "reactions")
         .annotate(
             read_by_count=Count(
@@ -364,6 +364,7 @@ class MessageListView(APIView):
                 "files": request.FILES.getlist("files"),
                 "body": request.data.get("body", ""),
                 "reply_to_id": request.data.get("reply_to_id"),
+                "story_id": request.data.get("story_id"),
             }
         )
         if not serializer.is_valid():
@@ -378,12 +379,27 @@ class MessageListView(APIView):
             else Message.Type.MEDIA
         )
 
+        story = None
+        story_id = vd.get("story_id")
+        if story_id:
+            from apps.story.models import Story
+            from apps.story.serializers import get_active_story
+
+            try:
+                story = get_active_story(story_id)
+            except Story.DoesNotExist:
+                return APIResponse.error(
+                    errors={"story_id": "Story not found or expired."},
+                    status_code=400,
+                )
+
         msg = Message.objects.create(
             conversation=conv,
             sender=request.user,
             type=msg_type,
             body=vd["body"],
             reply_to_id=vd.get("reply_to_id"),
+            story=story,
         )
 
         MessageMedia.objects.bulk_create(

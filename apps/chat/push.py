@@ -9,6 +9,8 @@ logger = logging.getLogger("apps.chat")
 def _preview(msg_data):
     msg_type = msg_data.get("type", "text")
     body = (msg_data.get("body") or "").strip()
+    if msg_data.get("story"):
+        return body[:120] if body else "Replied to your story"
     if body:
         return body[:120]
     if msg_type == "media":

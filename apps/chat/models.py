@@ -78,6 +78,13 @@ class Message(TimeStampedModel):
     reply_to = models.ForeignKey(
         "self", null=True, blank=True, on_delete=models.SET_NULL, related_name="replies"
     )
+    story = models.ForeignKey(
+        "story.Story",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="reply_messages",
+    )
     is_edited = models.BooleanField(default=False)
     is_deleted = models.BooleanField(default=False)
 

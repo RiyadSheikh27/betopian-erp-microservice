@@ -34,7 +34,6 @@ from .serializers import (
     ReelCreateSerializer,
     ReelUpdateSerializer,
 )
-# from apps.feed.views import invalidate_user_feed, invalidate_community_feed
 
 from django.contrib.contenttypes.models import ContentType
 

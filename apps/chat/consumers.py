@@ -75,7 +75,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
         body = data.get("body", "").strip()
         if not body:
             return
-        msg = await self._save_message(body, data.get("reply_to_id"))
+        msg = await self._save_message(
+            body,
+            data.get("reply_to_id"),
+            data.get("story_id"),
+        )
         await database_sync_to_async(notify_chat_message)(
             self.conv_id, self.user, msg
         )
@@ -223,13 +227,21 @@ class ChatConsumer(AsyncWebsocketConsumer):
         return f"{scheme}://{host}{relative_url}"
 
     @database_sync_to_async
-    def _save_message(self, body, reply_to_id=None):
+    def _save_message(self, body, reply_to_id=None, story_id=None):
         from .models import (
             Message,
             MessageStatus,
             ConversationParticipant,
             Conversation,
         )
+        from apps.story.serializers import get_active_story, serialize_story_brief
+
+        story = None
+        if story_id:
+            try:
+                story = get_active_story(story_id)
+            except Exception:
+                story = None
 
         msg = Message.objects.create(
             conversation_id=self.conv_id,
@@ -237,6 +249,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             type=Message.Type.TEXT,
             body=body,
             reply_to_id=reply_to_id,
+            story=story,
         )
 
         conv = Conversation.objects.get(pk=self.conv_id)
@@ -267,6 +280,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
             except Message.DoesNotExist:
                 pass
 
+        story_data = None
+        if story:
+            story_data = serialize_story_brief(story, url_builder=self._build_url)
+
         return {
             "id": str(msg.id),
             "sender": {
@@ -277,6 +294,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             "type": msg.type,
             "body": msg.body,
             "reply_to": reply_data,
+            "story": story_data,
             "media": [],
             "reactions": {},
             "read_by_count": 0,
@@ -292,10 +310,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         try:
             msg = (
-                Message.objects.select_related("sender", "reply_to__sender")
+                Message.objects.select_related("sender", "reply_to__sender", "story__author")
                 .prefetch_related("media")
                 .get(pk=msg_id, conversation_id=self.conv_id)
             )
+            from apps.story.serializers import serialize_story_brief
+
             return {
                 "id": str(msg.id),
                 "sender": {
@@ -313,6 +333,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
                         "body": msg.reply_to.body,
                     }
                     if msg.reply_to
+                    else None
+                ),
+                "story": (
+                    serialize_story_brief(msg.story, url_builder=self._build_url)
+                    if msg.story_id
                     else None
                 ),
                 "media": [

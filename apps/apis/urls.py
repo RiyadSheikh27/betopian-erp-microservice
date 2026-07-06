@@ -52,6 +52,15 @@ from apps.chat.views import (
     CallEndView,
 )
 from apps.notifications.views import DeviceRegisterView, DeviceUnregisterView
+from apps.story.views import (
+    StoryTrayView,
+    StoryUserCarouselView,
+    StoryCreateView,
+    StoryViewMarkView,
+    StoryDeleteView,
+    StoryMineView,
+    StoryViewersView,
+)
     
 utils_urlpatterns = [
     path("upload-profile-image/", ProfileImageUploadView.as_view(), name="upload-profile-image"),
@@ -138,7 +147,6 @@ ebook_urlpatterns = [
     path("ebooks/", EbookListView.as_view(), name="ebook-list"),
 ]
 
-
 chat_urlpatterns = [
     # User search (central ERP + local DB match)
     path("conversations/user/search/", UserSearchView.as_view(), name="chat-user-search"),
@@ -170,6 +178,16 @@ chat_urlpatterns = [
     path("calls/<uuid:call_id>/end/", CallEndView.as_view(), name="call-end"),
 ]
 
+story_urlpatterns = [
+    path("stories/tray/", StoryTrayView.as_view(), name="story-tray"),
+    path("stories/mine/", StoryMineView.as_view(), name="story-mine"),
+    path("stories/user/<uuid:user_id>/", StoryUserCarouselView.as_view(), name="story-user-carousel"),
+    path("stories/<uuid:pk>/view/", StoryViewMarkView.as_view(), name="story-view"),
+    path("stories/<uuid:pk>/viewers/", StoryViewersView.as_view(), name="story-viewers"),
+    path("stories/<uuid:pk>/", StoryDeleteView.as_view(), name="story-delete"),
+    path("stories/", StoryCreateView.as_view(), name="story-create"),
+]
+
 urlpatterns = [
     *auth_urlpatterns,
     *contents_urlpatterns,
@@ -180,4 +198,5 @@ urlpatterns = [
     *mom_urlpatterns,
     *ebook_urlpatterns,
     *chat_urlpatterns,
+    *story_urlpatterns,
 ]
