@@ -90,6 +90,18 @@ def get_token_from_request(request):
     return auth_header.split(" ", 1)[1].strip()
 
 
+def get_central_access_token(request):
+    """
+    Resolve the central ERP bearer token for outbound API calls.
+    When the client sends a central token in Authorization (like the profile
+    API), use that directly. For app-JWT auth, use the stored central token.
+    """
+    bearer = get_token_from_request(request)
+    if bearer and decode_jwt_payload(bearer) is None:
+        return bearer
+    return getattr(request.user, "central_access_token", "") or ""
+
+
 def decode_jwt_payload(token):
     """Decode and validate our own issued JWT, return payload dict or None."""
     try:

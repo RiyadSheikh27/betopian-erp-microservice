@@ -150,7 +150,10 @@ def _fetch_central_employees(request, *, query=None, page=1, page_size=50):
     """Fetch employees from central ERP directory (search or paginated list)."""
     import requests as req
 
-    token = getattr(request.user, "central_access_token", "")
+    from apps.authentication.utils import get_central_access_token
+
+    token = get_central_access_token(request)
+    session_id = request.COOKIES.get("session_id", "")
     params = {"page": page, "limit": page_size}
     if query:
         params["search"] = query
@@ -159,7 +162,7 @@ def _fetch_central_employees(request, *, query=None, page=1, page_size=50):
             "https://erp.betopiagroup.com/employee-directory/",
             params=params,
             headers={"Authorization": f"Bearer {token}"},
-            cookies={"session_id": request.COOKIES.get("session_id", "")},
+            cookies={"session_id": session_id} if session_id else {},
             timeout=10,
         )
         if resp.status_code == 200:
