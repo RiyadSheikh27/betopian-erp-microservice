@@ -12,16 +12,17 @@ Authorization: Bearer <access_token>
 ```
 
 ### Token model
-The app uses **two different tokens** — do not confuse them:
+The app uses **three different tokens** — do not confuse them:
 
 | Token | Issued by | Sent by client | Used for |
 | --- | --- | --- | --- |
 | **App JWT** (`access_token` / `refresh_token`) | This service, on `POST /login/` | On every request (`Authorization: Bearer …`) and WebSocket (`?token=…`) | Authenticating the caller to this API |
-| **Microsoft (central) access token** | Microsoft Entra ID | Only once, in the `POST /login/` body | Stored server-side as `central_access_token`; used **internally** for calls to the central ERP (e.g. employee-directory search) |
+| **Microsoft access token** | Microsoft Entra ID | Only once, in the `POST /login/` body | Input token used to authenticate with central ERP `/login-sso` |
+| **Central ERP access token** (`central_access_token`) | Central ERP (`POST /login-sso`) | Not sent by client | Stored server-side and used for internal central calls (`/profiles/`, `/employee-directory/`) |
 
-The Microsoft access token is captured at login and stored on the user record. Clients **never** send it again — the server attaches it automatically for central ERP calls.
+During login, the service exchanges the Microsoft token at central `/login-sso`, stores the returned `central_access_token` on the user record, and uses it for central ERP calls. Clients **never** send `central_access_token` directly.
 
-> **Note:** Microsoft access tokens are short-lived (~60–80 min). Once the stored `central_access_token` expires, central ERP calls (such as user search) return no results until the user logs in again with a fresh Microsoft token.
+> Login requires successful central `/login-sso` token exchange.
 
 ### Response envelope
 All endpoints return a consistent envelope:
@@ -44,7 +45,7 @@ All endpoints return a consistent envelope:
 
 **Authentication:** None (public)
 
-**Description:** Verifies a Microsoft Entra ID token against the central ERP, mirrors the user locally, stores the Microsoft token as `central_access_token`, and issues this service's own JWT pair.
+**Description:** Verifies a Microsoft Entra ID token by first calling central `POST /login-sso`, uses the returned central access token to fetch central profile data, mirrors the user locally, stores `central_access_token`, and issues this service's own JWT pair.
 
 **Body:** (send either `access_token` or `id_token`)
 ```json
@@ -103,9 +104,9 @@ All endpoints return a consistent envelope:
 | --- | --- |
 | `422` | Payload invalid (neither `access_token` nor `id_token` supplied). |
 | `401` | Microsoft token invalid or expired. |
-| `502` / `503` | Central ERP profile service unreachable **and** no stored user to fall back to. |
+| `502` / `503` | Central ERP login/profile service unreachable. |
 
-> If the central profile service is temporarily unavailable but the user already exists locally, login succeeds using the stored profile data (the `central_access_token` is **not** refreshed in this case).
+> Login path: Microsoft token -> central `/login-sso` -> central `access_token` -> central `/profiles/`.
 
 ---
 

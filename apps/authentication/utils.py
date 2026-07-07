@@ -4,7 +4,8 @@ from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import TokenError
 
-CENTRAL_MOBILE_PROFILE_URL = "https://erp.betopiagroup.com/mobile-api/profile"
+CENTRAL_LOGIN_SSO_URL = "https://erp.betopiagroup.com/login-sso"
+CENTRAL_PROFILE_URL = "https://erp.betopiagroup.com/profiles/"
 CENTRAL_TIMEOUT = 15
 
 User = get_user_model()
@@ -28,22 +29,54 @@ def decode_ms_claims(token):
         return {}
 
 
-def fetch_central_profile(ms_token):
+def exchange_central_access_token(ms_token, app_version="", device_id="", session_id=""):
     """
-    Fetch the user's profile from central ERP using the Microsoft access token.
+    Exchange Microsoft token for central ERP access token via /login-sso.
+    """
+    payload = {
+        "access_token": ms_token,
+        "appVersion": app_version,
+        "deviceId": device_id,
+    }
+    try:
+        resp = requests.post(
+            CENTRAL_LOGIN_SSO_URL,
+            json=payload,
+            cookies={"session_id": session_id} if session_id else {},
+            timeout=CENTRAL_TIMEOUT,
+        )
+    except requests.RequestException:
+        raise SSOServiceError("Central login service unreachable.", 503)
+
+    if resp.status_code == 401:
+        raise SSOServiceError("Invalid or expired Microsoft token.", 401)
+    if resp.status_code != 200:
+        raise SSOServiceError("Unable to login to central service.", 502)
+
+    data = resp.json()
+    central_access_token = data.get("access_token")
+    if not central_access_token:
+        raise SSOServiceError("Central login did not return access token.", 502)
+    return central_access_token
+
+
+def fetch_central_profile(access_token, session_id=""):
+    """
+    Fetch the user's profile from central ERP using the provided bearer token.
     Central validates the token: 200 = valid, 401 = invalid/expired.
     """
     try:
         resp = requests.get(
-            CENTRAL_MOBILE_PROFILE_URL,
-            headers={"Authorization": f"Bearer {ms_token}"},
+            CENTRAL_PROFILE_URL,
+            headers={"Authorization": f"Bearer {access_token}"},
+            cookies={"session_id": session_id} if session_id else {},
             timeout=CENTRAL_TIMEOUT,
         )
     except requests.RequestException:
         raise SSOServiceError("Central profile service unreachable.", 503)
 
     if resp.status_code == 401:
-        raise SSOServiceError("Invalid or expired Microsoft token.", 401)
+        raise SSOServiceError("Invalid or expired access token.", 401)
     if resp.status_code != 200:
         raise SSOServiceError("Unable to fetch central profile.", 502)
     return resp.json()

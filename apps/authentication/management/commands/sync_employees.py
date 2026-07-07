@@ -17,7 +17,7 @@ from django.db import DataError, IntegrityError, transaction
 from apps.authentication.models import User
 
 # Paste your bearer access token here before running.
-BEARER_TOKEN = "eyJ0eXAiOiJKV1QiLCJub25jZSI6IjZCci1NUFFNUFhpcTFHU0g0bFEzcEROWWtEelBvcjQzMVFlX09SamdzRUUiLCJhbGciOiJSUzI1NiIsIng1dCI6ImFGa21LVkZjLTRXVjZzWENCdk5aa1hJNTA1WSIsImtpZCI6ImFGa21LVkZjLTRXVjZzWENCdk5aa1hJNTA1WSJ9.eyJhdWQiOiIwMDAwMDAwMy0wMDAwLTAwMDAtYzAwMC0wMDAwMDAwMDAwMDAiLCJpc3MiOiJodHRwczovL3N0cy53aW5kb3dzLm5ldC8wZDJjMTExNi1kN2MyLTQzODAtYjQ0Ni03OGU3MWQ4ZjI0NjUvIiwiaWF0IjoxNzgzMjQxNjIzLCJuYmYiOjE3ODMyNDE2MjMsImV4cCI6MTc4MzI0NTgxOSwiYWNjdCI6MCwiYWNyIjoiMSIsImFjcnMiOlsicGZkciJdLCJhaW8iOiJBVVFBdS84Y0FBQUFzVWtQLzFIcWhYRHdET1ZCcmFYSThqOWxyWWllV1lRODREaTRRNWRVNURBOWVQY2QzcFM3YmxRSXNtUWY4ZW4zWTd0bnVOcXZtb0R3bWdWTDdnQ2U5QT09IiwiYW1yIjpbInB3ZCJdLCJhcHBfZGlzcGxheW5hbWUiOiJQcm9kX0JldG9waWEgRGFpbHkiLCJhcHBpZCI6Ijk3ZmFkZmM4LTIwMGUtNDJkOS1iMTEyLTc4N2IwOTFhNDMyYyIsImFwcGlkYWNyIjoiMCIsImZhbWlseV9uYW1lIjoiUmFobWFuIFRhbnZlZXIiLCJnaXZlbl9uYW1lIjoiVG91aGlkdXIiLCJpZHR5cCI6InVzZXIiLCJpcGFkZHIiOiIxMTUuMTI3LjU0LjIwOSIsIm5hbWUiOiJUb3VoaWR1ciBSYWhtYW4gVGFudmVlciIsIm9pZCI6IjdhMjBjMTQ4LTgxY2EtNGVjMC04M2VkLTdlNDA4ODVkNmQ1NSIsIm9ucHJlbV9zaWQiOiJTLTEtNS0yMS0yNTkzMzk5MzUzLTM5Nzg2NTc2OTEtMjAzNzM2NjcyMy0yODAwIiwicGxhdGYiOiI4IiwicHVpZCI6IjEwMDMyMDA1RTIxNTBCNzUiLCJyaCI6IjEuQWNZQUZoRXNEY0xYZ0VPMFJuam5IWThrWlFNQUFBQUFBQUFBd0FBQUFBQUFBQUFBQVBiR0FBLiIsInNjcCI6ImVtYWlsIG9wZW5pZCBwcm9maWxlIFVzZXIuUmVhZCIsInNpZCI6IjAwNmI3M2VhLWY3ZDQtN2I1MC03ZTE3LWZmMzA4MzQ1Y2U2ZSIsInNpZ25pbl9zdGF0ZSI6WyJrbXNpIl0sInN1YiI6InY4ZTk0cTZmSm9WdlVRVmhpNlZBMFV4MHZxRkhpcGpKTnRTbUlqRFpXdU0iLCJ0ZW5hbnRfcmVnaW9uX3Njb3BlIjoiQVMiLCJ0aWQiOiIwZDJjMTExNi1kN2MyLTQzODAtYjQ0Ni03OGU3MWQ4ZjI0NjUiLCJ1bmlxdWVfbmFtZSI6InRhbnZlZXJAYmV0b3BpYWdyb3VwLmNvbSIsInVwbiI6InRhbnZlZXJAYmV0b3BpYWdyb3VwLmNvbSIsInV0aSI6IjNUZnNuRWJzZFVDX0JfUEgwYnM5QUEiLCJ2ZXIiOiIxLjAiLCJ3aWRzIjpbImI3OWZiZjRkLTNlZjktNDY4OS04MTQzLTc2YjE5NGU4NTUwOSJdLCJ4bXNfYWNkIjoxNzgyMDI0ODM3LCJ4bXNfYWN0X2ZjdCI6IjMgOSIsInhtc19mdGQiOiJMTFBfS3N3ZTlCLVVzQkVEbXE5clJPVlNTWXVPQXRWRkNXYlgtRDBOUVNZQmEyOXlaV0Z6YjNWMGFDMWtjMjF6IiwieG1zX2lkcmVsIjoiMSA4IiwieG1zX3BmdGV4cCI6MTc4MzMzMjIxOSwieG1zX3N0Ijp7InN1YiI6Imo3UzJoYVlXQVlrMW1aNHhXODRrMzNqRnRhdVJoaEdaTkxOYTNFa0ExRVkifSwieG1zX3N1Yl9mY3QiOiIxNCAzIiwieG1zX3RjZHQiOjE3NTYwODI5NzUsInhtc190bnRfZmN0IjoiMyAxNCJ9.JwzzlIJuOPxMhFbe5c5ECCz4txRoRtdG7m6NBJeZTrTJWk3x_KYmXiOdXqAkwaIdIT-2Y1jG9J1_W4uay1Ct0hzbxZcVGTQb75ZR4SLsYPlyUmrGO0KXqRjmq75vmiS7LLoPsseEHdsIP4Eogwp6x2e3m07sLtz0b77jwQmjaORp_iacK7hNjQlyugcL61EVNPMTR55rf1cHscrBih1pM38f82s8T9V4Kk_ABLldH3mUc_sED8HbhHr0sTrpj58yJAiD5rzV4E7YNStEQhFp1IUFSH8cGZoJ8Kzg6C8PRAAjsMvCrKNidVl8pLKRNWraWEDsb34vJTsbkkXVlNxgyg"
+BEARER_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjY4LCJzaWQiOjEwOTgsInR5cCI6ImFjY2VzcyIsImlhdCI6MTc4MzQxMDkyOSwiZXhwIjoxNzgzNDE0NTI5fQ.mxxft6t11BHVJUkHFCkQJf9z5tZMZ-w8K_Kc2w-EWWA"
 
 CENTRAL_BASE_URL = "https://erp.betopiagroup.com"
 EMPLOYEE_DIRECTORY_URL = f"{CENTRAL_BASE_URL}/employee-directory/"
@@ -146,7 +146,7 @@ def map_employee(employee):
         avatar_url = str(avatar_url).strip() or None
 
     fields = {
-        "central_id": None,
+        "central_id": employee.get("id"),
         "employee_id": employee_id,
         "email": email,
         "username": username,
@@ -168,8 +168,12 @@ def map_employee(employee):
 
 def upsert_user(fields):
     user = User.objects.filter(employee_id=fields["employee_id"]).first()
+    if user is None and fields.get("central_id"):
+        user = User.objects.filter(central_id=fields["central_id"]).first()
     if user is None:
         user = User.objects.filter(email__iexact=fields["email"]).first()
+    if user is None:
+        user = User.objects.filter(username=fields["username"]).first()
 
     exclude_pk = user.pk if user else None
     fields["email"] = _ensure_unique_email(

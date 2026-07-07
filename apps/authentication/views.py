@@ -7,11 +7,11 @@ from rest_framework.permissions import IsAuthenticated
 from apps.utils.throttles import AuthThrottle
 
 from apps.utils.response import APIResponse
-from .models import User
 from .serializers import SSOLoginSerializer, UserProfileSerializer
 from .utils import (
     SSOServiceError,
     decode_ms_claims,
+    exchange_central_access_token,
     fetch_central_profile,
     sync_user_from_profile,
 )
@@ -38,6 +38,7 @@ class SSOLoginView(APIView):
         data = serializer.validated_data
         ms_token = data.get("access_token") or data.get("id_token")
 
+        session_id = request.COOKIES.get("session_id", "")
         ms_claims = decode_ms_claims(ms_token)
         azure_oid = ms_claims.get("oid")
         profile = None
@@ -45,31 +46,22 @@ class SSOLoginView(APIView):
         changed = set()
 
         try:
-            profile = fetch_central_profile(ms_token)
+            central_access_token = exchange_central_access_token(
+                ms_token=ms_token,
+                app_version=data.get("appVersion", ""),
+                device_id=data.get("deviceId", ""),
+                session_id=session_id,
+            )
+            profile = fetch_central_profile(central_access_token, session_id=session_id)
         except SSOServiceError as exc:
-            # Invalid token always fails; a service outage lets a known user through.
-            fallback_email = ms_claims.get("preferred_username") or ms_claims.get("upn")
-            user = (
-                None
-                if exc.status_code == 401
-                else User.objects.filter(email__iexact=fallback_email).first()
-                if fallback_email
-                else None
-            )
-            if user is None:
-                logger.warning("SSO login failed: %s", exc.message)
-                return APIResponse.error(
-                    message=exc.message, status_code=exc.status_code
-                )
-            logger.warning(
-                "Central profile unavailable, using stored data | email=%s", user.email
-            )
+            logger.warning("SSO login failed: %s", exc.message)
+            return APIResponse.error(message=exc.message, status_code=exc.status_code)
+
+        user, created, changed = sync_user_from_profile(profile, token=central_access_token)
+        if created:
+            logger.info("SSO user created | email=%s", user.email)
         else:
-            user, created, changed = sync_user_from_profile(profile, token=ms_token)
-            if created:
-                logger.info("SSO user created | email=%s", user.email)
-            else:
-                logger.info("SSO user synced | email=%s", user.email)
+            logger.info("SSO user synced | email=%s", user.email)
 
         if not azure_oid:
             azure_oid = str(user.central_id)
