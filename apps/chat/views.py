@@ -1,4 +1,5 @@
 import logging
+import math
 from datetime import timedelta
 
 from asgiref.sync import async_to_sync
@@ -48,6 +49,13 @@ PAGE_SIZE = 20
 def _parse_page_size(request, default=PAGE_SIZE):
     try:
         return min(int(request.query_params.get("page_size", default)), 50)
+    except (TypeError, ValueError):
+        return default
+
+
+def _parse_page(request, default=1):
+    try:
+        return max(1, int(request.query_params.get("page", default)))
     except (TypeError, ValueError):
         return default
 
@@ -138,25 +146,56 @@ def _mark_read_bulk(messages, user):
         ).update(is_read=True, is_delivered=True, read_at=timezone.now())
 
 
-def _search_central(query, request):
-    """Search central ERP employee directory."""
+def _fetch_central_employees(request, *, query=None, page=1, page_size=50):
+    """Fetch employees from central ERP directory (search or paginated list)."""
     import requests as req
+
     token = getattr(request.user, "central_access_token", "")
+    params = {"page": page, "limit": page_size}
+    if query:
+        params["search"] = query
     try:
         resp = req.get(
             "https://erp.betopiagroup.com/employee-directory/",
-            params={"search": query},
+            params=params,
             headers={"Authorization": f"Bearer {token}"},
             cookies={"session_id": request.COOKIES.get("session_id", "")},
             timeout=10,
         )
         if resp.status_code == 200:
             data = resp.json()
-            return data.get("employees", [])
-        logger.warning("Central search failed | status=%s", resp.status_code)
+            return {
+                "employees": data.get("employees", []),
+                "total": data.get("total", 0),
+                "limit": data.get("limit", page_size) or page_size,
+            }
+        logger.warning("Central employee fetch failed | status=%s", resp.status_code)
     except Exception as e:
-        logger.error("Central search error | %s", e)
-    return []
+        logger.error("Central employee fetch error | %s", e)
+    return {"employees": [], "total": 0, "limit": page_size}
+
+
+def _map_employee_results(employees, request_user):
+    """Enrich central ERP employees with local user data; skip self."""
+    User = get_user_model()
+    self_code = str(request_user.employee_id).strip()
+    results = []
+    for emp in employees:
+        emp_code = str(emp.get("employee_code", "")).strip()
+        if emp_code == self_code:
+            continue
+        local = User.objects.filter(employee_id=emp_code).first()
+        results.append(
+            {
+                "id": local.id if local else None,
+                "employee_id": emp_code,
+                "name": emp.get("name", ""),
+                "position": emp.get("job_title", ""),
+                "avatar_url": emp.get("avatar_url"),
+                "is_active_on_social": bool(local),
+            }
+        )
+    return results
 
 
 """ Views Section """
@@ -164,7 +203,9 @@ def _search_central(query, request):
 
 class UserSearchView(APIView):
     """
-    Search employees from central ERP directory.
+    Search or list employees from central ERP directory.
+    Without q: paginated list of all employees.
+    With q (min 2 chars): search by name.
     Matches employee_code with local employee_id to flag social status.
     Results cached 30s to avoid hammering central ERP.
     """
@@ -173,40 +214,46 @@ class UserSearchView(APIView):
 
     def get(self, request):
         query = request.query_params.get("q", "").strip()
-        if len(query) < 2:
+        if query and len(query) < 2:
             return APIResponse.error(
                 message="Query must be at least 2 characters.", status_code=400
             )
 
-        from django.contrib.auth import get_user_model
-
-        User = get_user_model()
-
-        cache_key = f"central_search:{query}"
-        employees = cache.get(cache_key)
-        if employees is None:
-            employees = _search_central(query, request)
-            cache.set(cache_key, employees, 30)
-
-        results = []
-        for emp in employees:
-            emp_code = str(emp.get("employee_code", "")).strip()
-            if emp_code == str(request.user.employee_id).strip():
-                continue  # skip self
-
-            local = User.objects.filter(employee_id=emp_code).first()
-            results.append(
-                {
-                    "id": local.id if local else None,
-                    "employee_id": emp_code,
-                    "name": emp.get("name", ""),
-                    "position": emp.get("job_title", ""),
-                    "avatar_url": emp.get("avatar_url"),
-                    "is_active_on_social": bool(local),
-                }
+        if query:
+            cache_key = f"central_search:{query}"
+            employees = cache.get(cache_key)
+            if employees is None:
+                payload = _fetch_central_employees(request, query=query)
+                employees = payload["employees"]
+                cache.set(cache_key, employees, 30)
+            return APIResponse.success(
+                data=_map_employee_results(employees, request.user)
             )
 
-        return APIResponse.success(data=results)
+        page = _parse_page(request)
+        page_size = _parse_page_size(request)
+        cache_key = f"central_list:{page}:{page_size}"
+        payload = cache.get(cache_key)
+        if payload is None:
+            payload = _fetch_central_employees(
+                request, page=page, page_size=page_size
+            )
+            cache.set(cache_key, payload, 30)
+
+        total = payload.get("total", 0)
+        limit = payload.get("limit", page_size) or page_size
+        total_pages = max(1, math.ceil(total / limit)) if total else 1
+
+        return APIResponse.success(
+            data=_map_employee_results(payload["employees"], request.user),
+            meta={
+                "page": page,
+                "page_size": page_size,
+                "total": total,
+                "total_pages": total_pages,
+                "has_more": page < total_pages,
+            },
+        )
 
 
 class ConversationListView(APIView):

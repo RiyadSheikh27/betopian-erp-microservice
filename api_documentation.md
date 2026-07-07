@@ -1664,12 +1664,21 @@ Direct messages (DM) and group chats. Text is sent over WebSocket; media/docs ov
 ---
 
 ### 3. Search Users (start chat)
-**Endpoint:** `GET /conversations/user/search/?q=<name>`
+**Endpoint:** `GET /conversations/user/search/`
 
 **Authentication:** Required
 
 **Query Parameters:**
-- `q` (required, min 2 characters) — search by name
+- `q` (optional, min 2 characters when provided) — search by name
+- `page` (optional, default: 1) — page number when listing all users (no `q`)
+- `page_size` (optional, default: 20, max: 50) — items per page when listing all users
+
+**Behavior:**
+- Without `q`: returns a paginated list of all employees from central ERP
+- With `q` (2+ characters): searches by name and returns all matching results
+
+**List mode response meta:**
+- `page`, `page_size`, `total`, `total_pages`, `has_more`
 
 ---
 
