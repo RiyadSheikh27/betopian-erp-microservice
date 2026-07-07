@@ -109,9 +109,9 @@ Find employees in central ERP to start a DM, or list all employees with paginati
 
 | Param | Required | Default | Max | Description |
 |-------|----------|---------|-----|-------------|
-| `q` | No | — | — | Search text; min 2 characters when provided |
-| `page` | No | `1` | — | Page number (list mode only, when `q` is omitted) |
-| `page_size` | No | `20` | `50` | Items per page (list mode only) |
+| `q` | No | — | — | Search text |
+| `page` | No | `1` | — | Page number |
+| `page_size` | No | `20` | `50` | Items per page |
 
 **Example — list all (paginated)**
 ```http
@@ -119,13 +119,13 @@ GET /api/v1/conversations/user/search/?page=1&page_size=20
 Authorization: Bearer eyJ...
 ```
 
-**Example — search by name**
+**Example — search by name (paginated)**
 ```http
-GET /api/v1/conversations/user/search/?q=john
+GET /api/v1/conversations/user/search/?q=john&page=1&page_size=20
 Authorization: Bearer eyJ...
 ```
 
-**Response `200` (search mode)**
+**Response `200`**
 ```json
 {
   "success": true,
@@ -138,33 +138,14 @@ Authorization: Bearer eyJ...
       "position": "Software Engineer",
       "avatar_url": "https://erp.example.com/avatar.jpg",
       "is_active_on_social": true
-    },
-    {
-      "id": null,
-      "employee_id": "EMP099",
-      "name": "John Smith",
-      "position": "HR Manager",
-      "avatar_url": null,
-      "is_active_on_social": false
     }
   ],
-  "errors": null,
-  "meta": { "timestamp": "..." }
-}
-```
-
-**Response `200` (list mode — no `q`)**
-```json
-{
-  "success": true,
-  "message": "Request successful",
-  "data": [ "..." ],
   "errors": null,
   "meta": {
     "page": 1,
     "page_size": 20,
-    "total": 842,
-    "total_pages": 43,
+    "total": 42,
+    "total_pages": 3,
     "has_more": true,
     "timestamp": "..."
   }
@@ -180,7 +161,6 @@ Authorization: Bearer eyJ...
 
 | Status | When |
 |--------|------|
-| `400` | `q` provided but shorter than 2 chars |
 | `401` | Missing/invalid token |
 
 ---

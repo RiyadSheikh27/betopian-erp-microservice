@@ -178,6 +178,19 @@ def _fetch_central_employees(request, *, query=None, page=1, page_size=50):
     return {"employees": [], "total": 0, "limit": page_size}
 
 
+def _pagination_meta(payload, page, page_size):
+    total = payload.get("total", 0)
+    limit = payload.get("limit", page_size) or page_size
+    total_pages = max(1, math.ceil(total / limit)) if total else 1
+    return {
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": total_pages,
+        "has_more": page < total_pages,
+    }
+
+
 def _map_employee_results(employees, request_user):
     """Enrich central ERP employees with local user data; skip self."""
     User = get_user_model()
@@ -207,8 +220,7 @@ def _map_employee_results(employees, request_user):
 class UserSearchView(APIView):
     """
     Search or list employees from central ERP directory.
-    Without q: paginated list of all employees.
-    With q (min 2 chars): search by name.
+    Supports pagination via page and page_size for both list and search modes.
     Matches employee_code with local employee_id to flag social status.
     Results cached 30s to avoid hammering central ERP.
     """
@@ -217,45 +229,20 @@ class UserSearchView(APIView):
 
     def get(self, request):
         query = request.query_params.get("q", "").strip()
-        if query and len(query) < 2:
-            return APIResponse.error(
-                message="Query must be at least 2 characters.", status_code=400
-            )
-
-        if query:
-            cache_key = f"central_search:{query}"
-            employees = cache.get(cache_key)
-            if employees is None:
-                payload = _fetch_central_employees(request, query=query)
-                employees = payload["employees"]
-                cache.set(cache_key, employees, 30)
-            return APIResponse.success(
-                data=_map_employee_results(employees, request.user)
-            )
-
         page = _parse_page(request)
         page_size = _parse_page_size(request)
-        cache_key = f"central_list:{page}:{page_size}"
+
+        cache_key = f"central_employees:{query}:{page}:{page_size}"
         payload = cache.get(cache_key)
         if payload is None:
             payload = _fetch_central_employees(
-                request, page=page, page_size=page_size
+                request, query=query or None, page=page, page_size=page_size
             )
             cache.set(cache_key, payload, 30)
 
-        total = payload.get("total", 0)
-        limit = payload.get("limit", page_size) or page_size
-        total_pages = max(1, math.ceil(total / limit)) if total else 1
-
         return APIResponse.success(
             data=_map_employee_results(payload["employees"], request.user),
-            meta={
-                "page": page,
-                "page_size": page_size,
-                "total": total,
-                "total_pages": total_pages,
-                "has_more": page < total_pages,
-            },
+            meta=_pagination_meta(payload, page, page_size),
         )
 
 

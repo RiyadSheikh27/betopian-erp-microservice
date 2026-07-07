@@ -1669,15 +1669,15 @@ Direct messages (DM) and group chats. Text is sent over WebSocket; media/docs ov
 **Authentication:** Required
 
 **Query Parameters:**
-- `q` (optional, min 2 characters when provided) — search by name
-- `page` (optional, default: 1) — page number when listing all users (no `q`)
-- `page_size` (optional, default: 20, max: 50) — items per page when listing all users
+- `q` (optional) — search by name
+- `page` (optional, default: 1) — page number
+- `page_size` (optional, default: 20, max: 50) — items per page
 
 **Behavior:**
 - Without `q`: returns a paginated list of all employees from central ERP
-- With `q` (2+ characters): searches by name and returns all matching results
+- With `q`: searches by name with pagination
 
-**List mode response meta:**
+**Response meta:**
 - `page`, `page_size`, `total`, `total_pages`, `has_more`
 
 ---
