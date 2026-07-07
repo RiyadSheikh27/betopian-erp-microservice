@@ -111,14 +111,71 @@ def decode_jwt_payload(token):
         return None
 
 
+def _resolve_username(email, employee_id=""):
+    local_part = email.split("@", 1)[0] if email and "@" in email else email
+    return local_part or f"user_{employee_id}"
+
+
+def _ensure_unique_email(email, employee_id, exclude_pk=None):
+    qs = User.objects.filter(email__iexact=email)
+    if exclude_pk:
+        qs = qs.exclude(pk=exclude_pk)
+    if not qs.exists():
+        return email
+
+    local_part, domain = email.split("@", 1)
+    candidate = f"{local_part}+{employee_id}@{domain}"
+    qs = User.objects.filter(email__iexact=candidate)
+    if exclude_pk:
+        qs = qs.exclude(pk=exclude_pk)
+    if not qs.exists():
+        return candidate
+
+    suffix = 2
+    while True:
+        candidate = f"{local_part}+{employee_id}_{suffix}@{domain}"
+        qs = User.objects.filter(email__iexact=candidate)
+        if exclude_pk:
+            qs = qs.exclude(pk=exclude_pk)
+        if not qs.exists():
+            return candidate
+        suffix += 1
+
+
+def _ensure_unique_username(username, employee_id, exclude_pk=None):
+    qs = User.objects.filter(username=username)
+    if exclude_pk:
+        qs = qs.exclude(pk=exclude_pk)
+    if not qs.exists():
+        return username
+
+    candidate = f"{username}_{employee_id}"
+    qs = User.objects.filter(username=candidate)
+    if exclude_pk:
+        qs = qs.exclude(pk=exclude_pk)
+    if not qs.exists():
+        return candidate
+
+    suffix = 2
+    while True:
+        candidate = f"{username}_{employee_id}_{suffix}"
+        qs = User.objects.filter(username=candidate)
+        if exclude_pk:
+            qs = qs.exclude(pk=exclude_pk)
+        if not qs.exists():
+            return candidate
+        suffix += 1
+
+
 def profile_to_user_fields(profile, token=None):
-    email = profile["email"]
+    email = profile["email"].strip().lower()
+    employee_id = profile["employee_id"]
     fields = {
         "central_id": profile["id"],
-        "employee_id": profile["employee_id"],
+        "employee_id": employee_id,
         "name": profile.get("name", ""),
         "email": email,
-        "username": email.split("@")[0],
+        "username": _resolve_username(email, employee_id),
         "phone": profile.get("phone", ""),
         "department": profile.get("department", ""),
         "position": profile.get("position", ""),
@@ -135,7 +192,7 @@ def profile_to_user_fields(profile, token=None):
 def find_user_for_profile(profile):
     employee_id = profile.get("employee_id")
     central_id = profile.get("id")
-    email = profile.get("email")
+    email = profile.get("email", "").strip().lower()
 
     if employee_id:
         user = User.objects.filter(employee_id=employee_id).first()
@@ -146,19 +203,33 @@ def find_user_for_profile(profile):
         if user:
             return user
     if email:
-        return User.objects.filter(email__iexact=email).first()
+        user = User.objects.filter(email__iexact=email).first()
+        if user:
+            return user
+        username = _resolve_username(email, employee_id or "")
+        return User.objects.filter(username=username).first()
     return None
 
 
 def sync_user_from_profile(profile, token=None):
     """
     Upsert a local user from a central ERP profile.
-    Looks up by employee_id, then central_id, then email.
+    Looks up by employee_id, then central_id, then email, then username.
     Updates only changed fields; creates when no match exists.
     Returns (user, created, changed_field_names).
     """
     fields = profile_to_user_fields(profile, token)
     user = find_user_for_profile(profile)
+
+    exclude_pk = user.pk if user else None
+    fields["email"] = _ensure_unique_email(
+        fields["email"], fields["employee_id"], exclude_pk
+    )
+    fields["username"] = _ensure_unique_username(
+        _resolve_username(fields["email"], fields["employee_id"]),
+        fields["employee_id"],
+        exclude_pk,
+    )
 
     if user:
         changed = {k: v for k, v in fields.items() if getattr(user, k) != v}
