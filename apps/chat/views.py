@@ -77,7 +77,6 @@ def _apply_conv_cursor(queryset, cursor_str):
 
 """ Query helpers """
 
-
 def _conv_qs(user):
     """Annotated conversation queryset for the chat list."""
     unread_subq = (
@@ -177,7 +176,6 @@ def _fetch_central_employees(request, *, query=None, page=1, page_size=50):
         logger.error("Central employee fetch error | %s", e)
     return {"employees": [], "total": 0, "limit": page_size}
 
-
 def _pagination_meta(payload, page, page_size):
     total = payload.get("total", 0)
     limit = payload.get("limit", page_size) or page_size
@@ -215,7 +213,6 @@ def _map_employee_results(employees, request_user):
 
 
 """ Views Section """
-
 
 class UserSearchView(APIView):
     """
@@ -483,7 +480,6 @@ class MessageListView(APIView):
             data=MessageSerializer(msg, context={"request": request}).data,
             status_code=201,
         )
-
 
 class MessageReactionListView(APIView):
     """

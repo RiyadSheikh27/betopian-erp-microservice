@@ -1,4 +1,3 @@
-import json
 import logging
 
 from django.conf import settings
@@ -6,6 +5,7 @@ from django.conf import settings
 logger = logging.getLogger("apps.utils.fcm")
 
 _app = None
+ANDROID_ALERT_CHANNEL = "betopia_social_alerts_v2"
 
 
 def _get_app():
@@ -24,16 +24,22 @@ def _get_app():
     return _app
 
 
-def send_to_user(user_id, *, title, body, data, high_priority=False):
+def send_to_user(user_id, *, title, body, data, high_priority=False, tokens=None):
     if not _get_app():
         return
 
     from firebase_admin import messaging
     from apps.notifications.models import DeviceToken
 
-    tokens = list(
-        DeviceToken.objects.filter(user_id=user_id).values_list("fcm_token", flat=True)
-    )
+    if tokens is None:
+        tokens = list(
+            DeviceToken.objects.filter(user_id=user_id).values_list(
+                "fcm_token", flat=True
+            )
+        )
+    else:
+        tokens = list(tokens)
+
     if not tokens:
         logger.debug("FCM skip | user=%s no tokens", user_id)
         return
@@ -42,12 +48,24 @@ def send_to_user(user_id, *, title, body, data, high_priority=False):
     if title or body:
         notification = messaging.Notification(title=title or "Betopian", body=body or "")
 
-    android = messaging.AndroidConfig(priority="high") if high_priority else None
-    apns = (
-        messaging.APNSConfig(headers={"apns-priority": "10"})
-        if high_priority
-        else None
+    android_notification = None
+    if notification:
+        android_notification = messaging.AndroidNotification(
+            channel_id=ANDROID_ALERT_CHANNEL,
+        )
+
+    android = messaging.AndroidConfig(
+        priority="high" if high_priority else "normal",
+        notification=android_notification,
     )
+
+    apns_headers = {"apns-priority": "10" if high_priority else "5"}
+    apns_payload = None
+    if notification:
+        apns_payload = messaging.APNSPayload(
+            aps=messaging.Aps(sound="default"),
+        )
+    apns = messaging.APNSConfig(headers=apns_headers, payload=apns_payload)
 
     message = messaging.MulticastMessage(
         notification=notification,
@@ -64,7 +82,6 @@ def send_to_user(user_id, *, title, body, data, high_priority=False):
         response.failure_count,
     )
 
-    # Remove dead tokens
     if response.failure_count:
         dead = []
         for idx, resp in enumerate(response.responses):

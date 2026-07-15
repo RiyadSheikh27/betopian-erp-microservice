@@ -55,7 +55,8 @@ All endpoints return a consistent envelope:
   "appVersion": "1.0.0",
   "deviceId": "stable-device-uuid-from-app",
   "fcm_token": "firebase-messaging-token",
-  "platform": "android"
+  "platform": "android",
+  "voip_token": ""
 }
 ```
 
@@ -67,8 +68,9 @@ All endpoints return a consistent envelope:
 | `deviceId` | Optional* | Stable device ID. Required when registering for push. |
 | `fcm_token` | Optional* | Firebase Messaging token. Register device for push when provided. |
 | `platform` | Optional* | `android` or `ios`. Required when `fcm_token` is provided. |
+| `voip_token` | Optional | iOS PushKit hex token. Aliases: `voip_push_token`, `apns_voip_token`. |
 
-\* For push notifications, send all three together: `deviceId`, `fcm_token`, and `platform`. Login works without them (no push until they are sent on a later login).
+\* For push notifications, send `deviceId`, `fcm_token`, and `platform` together. On iOS also send `voip_token` when available. Login works without them (no push until registered later).
 
 **Response (200 OK):**
 ```json
@@ -1345,16 +1347,35 @@ Also pushes a WebSocket `unread_count` event (see below).
 
 **Authentication:** Required
 
-**Description:** Register or replace the user's FCM token for push notifications. Also supported at login — see [Push Notifications (Firebase)](#push-notifications-firebase). Each user keeps **one** token row (re-register replaces the previous token).
+**Description:** Upsert the device's FCM (and optional iOS VoIP) tokens for push notifications. Also supported at login — see [Push Notifications (Firebase)](#push-notifications-firebase). Matched by `(user, device_id)`; tokens refresh on every register. Multiple devices per user are allowed.
 
 **Body:** (`device_id` or `deviceId` accepted)
+
+Android:
 ```json
 {
-  "deviceId": "stable-device-uuid-from-app",
+  "device_id": "stable-device-uuid-from-app",
   "fcm_token": "firebase-messaging-token",
   "platform": "android"
 }
 ```
+
+iOS (with PushKit VoIP):
+```json
+{
+  "device_id": "stable-device-uuid-from-app",
+  "fcm_token": "firebase-messaging-token",
+  "platform": "ios",
+  "voip_token": "a1b2c3d4e5f6..."
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `device_id` / `deviceId` | Yes | Stable ID per device (upsert key) |
+| `fcm_token` | Yes | Firebase Messaging registration token |
+| `platform` | Yes | `android` or `ios` |
+| `voip_token` | iOS when available | Apple PushKit hex token. Aliases: `voip_push_token`, `apns_voip_token` (first non-empty wins). Only overwrites stored VoIP when one of these keys is sent. |
 
 **Response (200 OK):**
 ```json
@@ -1371,9 +1392,9 @@ Also pushes a WebSocket `unread_count` event (see below).
 
 **Authentication:** Required
 
-**Description:** Remove device token on logout.
+**Description:** Remove the device row (FCM + VoIP tokens) on logout.
 
-**Body:**
+**Body:** (`device_id` or `deviceId` accepted)
 ```json
 {
   "device_id": "stable-device-uuid-from-app"
@@ -1409,8 +1430,9 @@ On notification tap
   → POST /notifications/{id}/read/
   → Navigate using post_id / reel_id / comment_id
 
-On login (or FCM token refresh)
+On login (or FCM / VoIP token refresh)
   → POST /login/ with push fields, OR POST /devices/register/
+     (iOS: include voip_token for CallKit incoming calls)
 
 On logout
   → DELETE /devices/unregister/
@@ -1517,23 +1539,29 @@ Auto-subscribes on connect — no client message required. User joins group `not
 
 ---
 
-## Push Notifications (Firebase)
+## Push Notifications (Firebase + iOS VoIP)
 
 Used when the app is in the **background or closed**. In-app real-time uses WebSocket (see [Notifications WebSocket](#notifications-websocket) and [Chat WebSocket](#chat-websocket)).
 
 | Channel | When |
 |---------|------|
 | WebSocket | App open — notifications, chat, feed |
-| FCM push | App background/closed — system tray |
+| FCM push | Chat / social alerts (Android + iOS); Android incoming-call wake |
+| APNs VoIP | **iOS incoming call** → CallKit when app is background / killed |
 
 **Requirements (Flutter / mobile):**
 - Firebase project with Android + iOS apps configured
 - Real `fcm_token` from `FirebaseMessaging.instance.getToken()`
+- iOS: PushKit `voip_token` from `PKPushRegistry` (topic `com.betopiagroup.mobileapp.voip`)
 - Register via **login** or **`POST /devices/register/`** (see [Register Device](#6-register-device-push))
-- Re-register when Firebase refreshes the token (`onTokenRefresh`)
-- iOS: APNs key uploaded to Firebase; test on a **physical device**
+- Re-register when FCM or VoIP tokens refresh
+- iOS chat alerts: APNs key uploaded to Firebase; VoIP calls use server APNs `.p8` directly — test on a **physical device**
 
-**Storage:** One FCM token per user — each register call **replaces** the previous token.
+**Storage:** Upsert by `(user, device_id)`. Each row stores `fcm_token`, optional `voip_token`, and `platform`. Multiple devices per user are allowed.
+
+**Chat / alert sound:**
+- iOS FCM → APNs: `sound: "default"`
+- Android FCM: high priority + notification channel `betopia_social_alerts_v2`
 
 ---
 
@@ -1548,7 +1576,8 @@ Include push fields in the login body:
   "access_token": "<microsoft_access_token>",
   "deviceId": "stable-device-uuid-from-app",
   "fcm_token": "firebase-messaging-token",
-  "platform": "android"
+  "platform": "ios",
+  "voip_token": "a1b2c3d4e5f6..."
 }
 ```
 
@@ -1557,8 +1586,9 @@ Include push fields in the login body:
 | `deviceId` | Yes | Stable ID per device |
 | `fcm_token` | Yes | From Firebase Messaging SDK |
 | `platform` | Yes | `android`, `ios` |
+| `voip_token` | Optional (iOS) | PushKit hex. Aliases: `voip_push_token`, `apns_voip_token` |
 
-All three must be sent together. Login works without them (no push until registered later).
+`deviceId`, `fcm_token`, and `platform` must be sent together for push registration. Login works without them (no push until registered later).
 
 ---
 
@@ -1991,16 +2021,37 @@ Only caller/callee may connect. Rejected if call is not active (`ringing`, `acce
 
 ---
 
-### Incoming call push (FCM)
+### Incoming call push (FCM + iOS VoIP)
 
-High-priority push when `POST /calls/initiate/` runs. Callee receives even if app is backgrounded.
+Sent when `POST /calls/initiate/` runs. Delivery depends on the callee device:
 
-**FCM `data` payload:**
+| Callee | Transport |
+|--------|-----------|
+| **iOS** with stored `voip_token` | APNs PushKit VoIP (`apns-push-type: voip`, topic `com.betopiagroup.mobileapp.voip`) — required for CallKit when app is killed |
+| **Android**, or iOS without VoIP token | High-priority FCM **data** push |
+
+**iOS VoIP payload:**
+```json
+{
+  "aps": { "content-available": 1 },
+  "call_id": "call-session-uuid",
+  "id": "call-session-uuid",
+  "caller_name": "Jane Doe",
+  "nameCaller": "Jane Doe",
+  "caller_id": "caller-uuid",
+  "conversation_id": "conversation-uuid",
+  "call_type": "video",
+  "type": "incoming_call"
+}
+```
+
+**Android / fallback FCM `data` payload:**
 ```json
 {
   "type": "incoming_call",
   "call_id": "call-session-uuid",
   "conv_id": "conversation-uuid",
+  "conversation_id": "conversation-uuid",
   "caller_id": "caller-uuid",
   "caller_name": "Jane Doe",
   "caller_avatar": "https://...",
@@ -2019,7 +2070,7 @@ High-priority push when `POST /calls/initiate/` runs. Callee receives even if ap
 ```
 
 **Flutter handling:**
-1. Background FCM → show CallKit / full-screen incoming UI
+1. iOS VoIP → report to CallKit immediately; Android FCM → full-screen / CallkitIncoming
 2. User accepts → `POST /calls/{call_id}/accept/`
 3. `GET /turn-credentials/` → create `RTCPeerConnection`
 4. Connect call WebSocket → exchange offer/answer/ICE
@@ -2060,24 +2111,27 @@ Sent automatically when a **new message** is created (text via WebSocket, media 
 {
   "type": "chat_message",
   "conv_id": "conversation-uuid",
+  "conversation_id": "conversation-uuid",
   "message_id": "message-uuid",
   "payload": "{...stringified WebSocket message data...}"
 }
 ```
 
+Tray sound: iOS `sound: "default"`; Android channel `betopia_social_alerts_v2`.
+
 **Flutter handling:**
-1. On login → send push fields in `POST /login/`, **or** `POST /devices/register/` after login
+1. On login → send push fields in `POST /login/` (include `voip_token` on iOS), **or** `POST /devices/register/` after login
 2. On logout → `DELETE /devices/unregister/`
-3. On notification tap → parse `conv_id` from `data` → open chat screen
+3. On notification tap → parse `conv_id` / `conversation_id` from `data` → open chat screen
 4. Optionally load history: `GET /conversations/{conv_id}/messages/`
 5. Suppress duplicate banner if user is already on that chat screen (client-side)
 
 **Testing notes:**
-- Postman **cannot** receive FCM on a phone — use a Flutter build with a real Firebase token
-- Register token for the **recipient** user at login, not the sender
-- Put recipient app in **background** to see the system notification
-- Server log `FCM sent | success=1 failure=0` means Firebase accepted the push
-- Invalid tokens are removed automatically after failed send; re-register from the app
+- Postman **cannot** receive FCM / VoIP on a phone — use a real device build
+- Register FCM (+ iOS VoIP) for the **recipient** user at login, not the sender
+- Put recipient app in **background** (or kill on iOS) to verify chat sound / CallKit
+- Server log `FCM sent | success=1 failure=0` or `APNs VoIP sent` means the push was accepted
+- Invalid FCM tokens are removed automatically; invalid VoIP tokens are cleared; re-register from the app
 
 ---
 

@@ -35,7 +35,6 @@ class AgendaItemUpdateSerializer(serializers.ModelSerializer):
 
 """ Meeting Notes """
 
-
 class MeetingNoteSerializer(serializers.ModelSerializer):
     class Meta:
         model = MeetingNote

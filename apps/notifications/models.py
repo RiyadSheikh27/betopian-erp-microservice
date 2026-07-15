@@ -50,6 +50,7 @@ class DeviceToken(models.Model):
     )
     device_id = models.CharField(max_length=255)
     fcm_token = models.TextField(unique=True)
+    voip_token = models.TextField(null=True, blank=True)
     platform = models.CharField(max_length=10, choices=Platform.choices)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

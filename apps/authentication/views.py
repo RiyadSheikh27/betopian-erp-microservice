@@ -74,13 +74,14 @@ class SSOLoginView(APIView):
         )
 
         if data.get("fcm_token"):
-            from apps.notifications.views import register_device
+            from apps.notifications.views import extract_voip_token, register_device
 
             register_device(
                 user,
                 data["deviceId"],
                 data["fcm_token"],
                 data["platform"],
+                voip_token=extract_voip_token(data),
             )
             logger.info("Device registered for push | user=%s device=%s", user.pk, data["deviceId"])
 

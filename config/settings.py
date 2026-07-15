@@ -449,3 +449,11 @@ TURN_SECRET = config("TURN_SECRET", default="your-turn-secret")
 """ Firebase Configuration """
 
 FIREBASE_CREDENTIALS_PATH = config("FIREBASE_CREDENTIALS_PATH", default="")
+
+""" Apple Push Notification service (VoIP) """
+
+APNS_KEY_PATH = config("APNS_KEY_PATH", default="")
+APNS_KEY_ID = config("APNS_KEY_ID", default="")
+APNS_TEAM_ID = config("APNS_TEAM_ID", default="")
+APNS_TOPIC = config("APNS_TOPIC", default="com.betopiagroup.mobileapp.voip")
+APNS_USE_SANDBOX = config("APNS_USE_SANDBOX", default=False, cast=bool)

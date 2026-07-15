@@ -9,6 +9,9 @@ class SSOLoginSerializer(serializers.Serializer):
     deviceId = serializers.CharField(required=False, allow_blank=True)
     fcm_token = serializers.CharField(required=False, allow_blank=True)
     platform = serializers.CharField(required=False, allow_blank=True)
+    voip_token = serializers.CharField(required=False, allow_blank=True)
+    voip_push_token = serializers.CharField(required=False, allow_blank=True)
+    apns_voip_token = serializers.CharField(required=False, allow_blank=True)
 
     def validate(self, attrs):
         if not attrs.get("access_token") and not attrs.get("id_token"):

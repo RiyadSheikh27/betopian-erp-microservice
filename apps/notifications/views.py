@@ -9,18 +9,37 @@ from .notify import get_unread_count, mark_all_seen, push_unread_count
 
 logger = logging.getLogger("apps.notifications")
 
+_UNSET = object()
+_VOIP_KEYS = ("voip_token", "voip_push_token", "apns_voip_token")
 
-def register_device(user, device_id, fcm_token, platform):
-    """Replace the user's FCM token (one row per user)."""
+
+def extract_voip_token(data):
+    """First non-empty VoIP alias, or '' if aliases sent but empty; None if omitted."""
+    if not any(k in data for k in _VOIP_KEYS):
+        return None
+    for key in _VOIP_KEYS:
+        val = (data.get(key) or "").strip()
+        if val:
+            return val
+    return ""
+
+
+def register_device(user, device_id, fcm_token, platform, voip_token=_UNSET):
+    """Upsert device tokens for this user + device_id."""
     from .models import DeviceToken
 
-    DeviceToken.objects.filter(fcm_token=fcm_token).delete()
-    DeviceToken.objects.filter(user=user).delete()
-    DeviceToken.objects.create(
+    DeviceToken.objects.filter(fcm_token=fcm_token).exclude(
+        user=user, device_id=device_id
+    ).delete()
+
+    defaults = {"fcm_token": fcm_token, "platform": platform}
+    if voip_token is not _UNSET:
+        defaults["voip_token"] = voip_token or None
+
+    DeviceToken.objects.update_or_create(
         user=user,
         device_id=device_id,
-        fcm_token=fcm_token,
-        platform=platform,
+        defaults=defaults,
     )
 
 
@@ -151,8 +170,16 @@ class DeviceRegisterView(APIView):
 
         from .models import DeviceToken
 
-        existed = DeviceToken.objects.filter(user=request.user).exists()
-        register_device(request.user, device_id, fcm_token, platform)
+        existed = DeviceToken.objects.filter(
+            user=request.user, device_id=device_id
+        ).exists()
+        register_device(
+            request.user,
+            device_id,
+            fcm_token,
+            platform,
+            voip_token=extract_voip_token(request.data),
+        )
 
         return APIResponse.success(
             message="Device registered." if not existed else "Device updated."

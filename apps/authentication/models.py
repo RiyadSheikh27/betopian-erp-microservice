@@ -8,7 +8,6 @@ from django.db import models
 
 """ Custom user model for central ERP users. Read-only mirror of central auth data. """
 
-
 class UserManager(BaseUserManager):
     def create_superuser(self, email, password=None, **extra_fields):
         """

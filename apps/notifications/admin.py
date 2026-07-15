@@ -26,6 +26,7 @@ class DeviceTokenAdmin(admin.ModelAdmin):
         "device_id",
         "platform",
         "token_preview",
+        "voip_preview",
         "token_length",
         "updated_at",
     )
@@ -36,13 +37,16 @@ class DeviceTokenAdmin(admin.ModelAdmin):
         "user__name",
         "device_id",
         "fcm_token",
+        "voip_token",
     )
     readonly_fields = (
         "user",
         "device_id",
         "platform",
         "fcm_token",
+        "voip_token",
         "token_preview",
+        "voip_preview",
         "token_length",
         "created_at",
         "updated_at",
@@ -67,6 +71,13 @@ class DeviceTokenAdmin(admin.ModelAdmin):
         if not obj.fcm_token:
             return format_html('<span style="color:#999;">empty</span>')
         preview = obj.fcm_token[:40] + ("…" if len(obj.fcm_token) > 40 else "")
+        return format_html("<code>{}</code>", preview)
+
+    @admin.display(description="VoIP token (preview)")
+    def voip_preview(self, obj):
+        if not obj.voip_token:
+            return format_html('<span style="color:#999;">empty</span>')
+        preview = obj.voip_token[:40] + ("…" if len(obj.voip_token) > 40 else "")
         return format_html("<code>{}</code>", preview)
 
     @admin.display(description="Token len", ordering="fcm_token")

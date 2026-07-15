@@ -945,7 +945,7 @@ Start call from **any screen** (profile, chat list, etc.).
 }
 ```
 
-**Side effects:** FCM high-priority push to callee; `incoming_call` on callee's notifications WS.
+**Side effects:** iOS VoIP APNs (if `voip_token`) or FCM high-priority push to callee; `incoming_call` on callee's notifications WS.
 
 **Errors**
 
@@ -1504,32 +1504,54 @@ initiate → RINGING
 
 ---
 
-## 11. FCM push payloads
+## 11. Push payloads (FCM + iOS VoIP)
 
-Postman cannot receive FCM — register token on a real device at login.
+Postman cannot receive push — register tokens on a real device at login / `POST /devices/register/`.
 
-### Chat message
+### Chat message (FCM)
 
 ```json
 {
   "type": "chat_message",
   "conv_id": "conversation-uuid",
+  "conversation_id": "conversation-uuid",
   "message_id": "message-uuid",
   "payload": "{...stringified message data...}"
 }
 ```
 
-### Incoming call (high priority)
+iOS tray sound: `default`. Android channel: `betopia_social_alerts_v2`.
+
+### Incoming call — Android / FCM fallback (high priority)
 
 ```json
 {
   "type": "incoming_call",
   "call_id": "call-session-uuid",
   "conv_id": "conversation-uuid",
+  "conversation_id": "conversation-uuid",
   "caller_id": "caller-uuid",
   "caller_name": "Alice",
   "caller_avatar": "https://...",
   "call_type": "video"
+}
+```
+
+### Incoming call — iOS VoIP (APNs PushKit)
+
+When callee has `platform=ios` and a stored `voip_token`. Topic: `com.betopiagroup.mobileapp.voip`.
+
+```json
+{
+  "aps": { "content-available": 1 },
+  "call_id": "call-session-uuid",
+  "id": "call-session-uuid",
+  "caller_name": "Alice",
+  "nameCaller": "Alice",
+  "caller_id": "caller-uuid",
+  "conversation_id": "conversation-uuid",
+  "call_type": "video",
+  "type": "incoming_call"
 }
 ```
 
@@ -1541,11 +1563,13 @@ Postman cannot receive FCM — register token on a real device at login.
 - [ ] Connect `/ws/chat/{conv_id}/` when opening a conversation
 - [ ] Text via WS; media via REST + `media_sent`
 - [ ] Handle FCM `chat_message` in background
+- [ ] Register `fcm_token` (+ iOS `voip_token`) via login or `POST /devices/register/`
 - [ ] Connect `/ws/notifications/` after login
 
 ### Calling
 - [ ] Call button → `POST /calls/initiate/` (no chat WS required)
-- [ ] FCM + CallKit for `incoming_call` when app killed
+- [ ] iOS: PushKit VoIP → CallKit for `incoming_call` when app killed
+- [ ] Android: FCM high-priority data for `incoming_call`
 - [ ] Notifications WS for `incoming_call` when app open
 - [ ] `GET /turn-credentials/` before `RTCPeerConnection`
 - [ ] Connect `/ws/calls/{call_id}/` for offer/answer/ICE
@@ -1565,3 +1589,8 @@ Postman cannot receive FCM — register token on a real device at login.
 | `CHAT_IMAGE_MAX_SIZE_MB` | `10` | Chat image upload limit |
 | `CHAT_VIDEO_MAX_SIZE_MB` | `200` | Chat video upload limit |
 | `CHAT_DOC_MAX_SIZE_MB` | `50` | Chat document upload limit |
+| `APNS_KEY_PATH` | — | Path to Apple APNs `.p8` key (VoIP) |
+| `APNS_KEY_ID` | — | APNs key ID |
+| `APNS_TEAM_ID` | — | Apple Team ID |
+| `APNS_TOPIC` | `com.betopiagroup.mobileapp.voip` | PushKit VoIP topic |
+| `APNS_USE_SANDBOX` | `false` | `true` for Xcode / sandbox APNs |

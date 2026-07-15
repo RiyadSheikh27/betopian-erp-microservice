@@ -34,7 +34,7 @@ class AppJWTAuthentication(BaseAuthentication):
 CENTRAL_PROFILE_URL = "https://erp.betopiagroup.com/profiles/"
 CENTRAL_EMPLOYEE_URL = "https://erp.betopiagroup.com/employee-directory/"
 CENTRAL_TIMEOUT = 20
-PROFILE_CACHE_TTL = 300  # seconds — skip central ERP round-trip on repeat requests
+PROFILE_CACHE_TTL = 300  # seconds - skip central ERP round-trip on repeat requests
 
 
 class CentralTokenAuthentication(BaseAuthentication):
