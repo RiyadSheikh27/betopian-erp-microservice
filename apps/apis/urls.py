@@ -1,5 +1,10 @@
 from django.urls import path
-from apps.authentication.views import ProfileView, LogoutView, SSOLoginView
+from apps.authentication.views import (
+    ProfileView,
+    LogoutView,
+    SSOLoginView,
+    ResolveEmployeeIdView,
+)
 from apps.contents.views import (
     PostListCreateView,
     PostDetailView,
@@ -71,6 +76,11 @@ auth_urlpatterns = [
     path("login/", SSOLoginView.as_view(), name="auth-login"),
     path("logout/", LogoutView.as_view(), name="auth-logout"),
     path("profile/", ProfileView.as_view(), name="auth-profile"),
+    path(
+        "resolve-employee-id/",
+        ResolveEmployeeIdView.as_view(),
+        name="auth-resolve-employee-id",
+    ),
 ]
 
 contents_urlpatterns = [

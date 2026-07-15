@@ -7,7 +7,12 @@ from rest_framework.permissions import IsAuthenticated
 from apps.utils.throttles import AuthThrottle
 
 from apps.utils.response import APIResponse
-from .serializers import SSOLoginSerializer, UserProfileSerializer
+from .models import User
+from .serializers import (
+    SSOLoginSerializer,
+    UserProfileSerializer,
+    ResolveEmployeeIdSerializer,
+)
 from .utils import (
     SSOServiceError,
     decode_ms_claims,
@@ -133,3 +138,34 @@ class LogoutView(APIView):
             "User logged out | user_id=%s email=%s", request.user.pk, request.user.email
         )
         return APIResponse.success(message="Logged out successfully.")
+
+
+class ResolveEmployeeIdView(APIView):
+    """
+    Resolve an HR employee_id to the local user UUID (pk).
+    Returns 404 if the employee has never logged into social media (not in DB).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = ResolveEmployeeIdSerializer(data=request.data)
+        if not serializer.is_valid():
+            return APIResponse.error(
+                errors=serializer.errors,
+                message="Invalid request payload.",
+                status_code=422,
+            )
+
+        employee_id = serializer.validated_data["employee_id"]
+        user = User.objects.filter(employee_id=employee_id).only("id").first()
+        if not user:
+            return APIResponse.error(
+                message="The user is not active on social media.",
+                status_code=404,
+            )
+
+        return APIResponse.success(
+            data={"id": str(user.id)},
+            message="User resolved successfully.",
+        )

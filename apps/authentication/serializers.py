@@ -60,3 +60,10 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "avatar_url",
         )
         read_only_fields = fields
+
+
+class ResolveEmployeeIdSerializer(serializers.Serializer):
+    employee_id = serializers.CharField(required=True, allow_blank=False, max_length=100)
+
+    def validate_employee_id(self, value):
+        return value.strip()

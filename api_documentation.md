@@ -165,6 +165,58 @@ All endpoints return a consistent envelope:
 
 ---
 
+### 4. Resolve Employee ID → User UUID
+**Endpoint:** `POST /resolve-employee-id/`
+
+**Authentication:** Required
+
+**Description:** Looks up a local user by HR `employee_id` and returns that user's UUID (`id` PK). Use this when you have an employee id from central ERP / directory and need the social-media user id. If the employee has never signed into this app (no local user row), the API returns 404.
+
+**Body:**
+```json
+{
+  "employee_id": "11016"
+}
+```
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `employee_id` | Yes | HR employee id stored on the local `users` table. |
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "User resolved successfully.",
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000"
+  },
+  "errors": null,
+  "meta": { "timestamp": "2026-07-02T09:19:04.840964Z" }
+}
+```
+
+**Error responses:**
+
+| Status | When |
+| --- | --- |
+| `401` | Missing or invalid JWT. |
+| `404` | `employee_id` not found locally — message: `"The user is not active on social media."` |
+| `422` | Missing or blank `employee_id`. |
+
+**Example 404:**
+```json
+{
+  "success": false,
+  "message": "The user is not active on social media.",
+  "data": null,
+  "errors": null,
+  "meta": { "timestamp": "2026-07-02T09:19:04.840964Z" }
+}
+```
+
+---
+
 ## Posts API
 
 ### 1. List User's Posts
