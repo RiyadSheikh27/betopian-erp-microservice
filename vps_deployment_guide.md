@@ -18,14 +18,14 @@ Files to edit on VPS (not in git): `.env`, `secrets/firebase-service-account.jso
 
 **`.env`** (production):
 
-```env
-DEBUG=False
-ALLOWED_HOSTS=social-media.betopiagroup.com,www.social-media.betopiagroup.com,103.161.9.10
-REDIS_URL=redis://redis:6379/1
-DB_HOST=db
-TURN_HOST=social-media.betopiagroup.com
-TURN_SECRET=<must-match-coturn>
-FIREBASE_CREDENTIALS_PATH=/app/secrets/firebase-service-account.json
+```env-example
+DEBUG= 
+ALLOWED_HOSTS= 
+REDIS_URL=
+DB_HOST= 
+TURN_HOST= 
+TURN_SECRET= 
+FIREBASE_CREDENTIALS_PATH= 
 ```
 
 Use `TURN_HOST=103.161.9.10` only during initial IP testing. `DB_HOST` / `REDIS_URL` must use Docker names (`db`, `redis`), not `127.0.0.1`.
